@@ -90,13 +90,13 @@ export default function StoryboardPage() {
   const [callSheetTitle, setCallSheetTitle] = useState("");
   const [callSheetText, setCallSheetText] = useState("");
   const [isUploadingCallSheet, setIsUploadingCallSheet] = useState(false);
-    const [showSceneDetails, setShowSceneDetails] = useState(false);
-    const [showCreateSceneDialog, setShowCreateSceneDialog] = useState(false);
-    const [newSceneNumber, setNewSceneNumber] = useState("");
-    const [newSceneTitle, setNewSceneTitle] = useState("");
-    const [isCreatingScene, setIsCreatingScene] = useState(false);
+  const [showSceneDetails, setShowSceneDetails] = useState(false);
+  const [showCreateSceneDialog, setShowCreateSceneDialog] = useState(false);
+  const [newSceneNumber, setNewSceneNumber] = useState("");
+  const [newSceneTitle, setNewSceneTitle] = useState("");
+  const [isCreatingScene, setIsCreatingScene] = useState(false);
 
-    const { data: projects } = useQuery<Project[]>({
+  const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
   });
 
@@ -989,7 +989,10 @@ export default function StoryboardPage() {
                 placeholder="在此粘贴通告单文本，系统将识别类似'场次: 1, 3, 5'的信息..."
                 className="min-h-[200px]"
                 value={callSheetText}
-                onChange={(e) => setCallSheetText(e.target.value)}
+                onChange={(e) => {
+                  console.log("Textarea changed:", e.target.value);
+                  setCallSheetText(e.target.value);
+                }}
               />
             </div>
           </div>
