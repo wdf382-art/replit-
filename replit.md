@@ -39,7 +39,15 @@ The server includes replit_integrations modules providing:
 - **Validation**: Zod schemas generated from Drizzle schemas via drizzle-zod
 - **Migrations**: Drizzle Kit with `db:push` command
 
-Core entities include: Users, Projects, Scripts, Scenes, Shots, Characters, PerformanceGuides, SceneAnalysis, ProductionNotes, and CallSheets. Projects support multiple types (advertisement, short_video, movie, web_series, micro_film, documentary, mv) with configurable director styles and visual styles.
+Core entities include: Users, Projects, Scripts, Scenes, Shots, Characters, PerformanceGuides, SceneAnalysis, ProductionNotes, CallSheets, ScriptVersions, and ShotVersions. Projects support multiple types (advertisement, short_video, movie, web_series, micro_film, documentary, mv) with configurable director styles and visual styles.
+
+### Version Control System
+The application implements version history tracking for both scripts and shots:
+- **ScriptVersions**: Tracks all modifications to script content with version numbers, timestamps, and change descriptions
+- **ShotVersions**: Tracks all modifications to shot data (description, camera settings, atmosphere, etc.)
+- **Restore Functionality**: Automatically saves current version before restoring to prevent data loss
+- **Version Numbering**: Monotonically increasing version numbers for clear history tracking
+- **UI Integration**: Version history panels in Script Editor sidebar and Storyboard shot edit dialog
 
 ### Design System
 The UI follows a Linear + Notion hybrid approach emphasizing information clarity and workflow efficiency. Typography uses Inter for UI and JetBrains Mono for script/code content. The app supports light/dark themes with CSS custom properties.
