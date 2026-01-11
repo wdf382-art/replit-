@@ -15,6 +15,9 @@ import {
   Move,
   Eye,
   Sparkles,
+  Check,
+  FileText,
+  ClipboardList,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -83,6 +86,11 @@ export default function StoryboardPage() {
   const [showShotVersions, setShowShotVersions] = useState(false);
   const [selectedShotVersion, setSelectedShotVersion] = useState<ShotVersion | null>(null);
   const [confirmRestoreShot, setConfirmRestoreShot] = useState(false);
+  const [showCallSheetDialog, setShowCallSheetDialog] = useState(false);
+  const [callSheetTitle, setCallSheetTitle] = useState("");
+  const [callSheetText, setCallSheetText] = useState("");
+  const [isUploadingCallSheet, setIsUploadingCallSheet] = useState(false);
+  const [showSceneDetails, setShowSceneDetails] = useState(false);
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -214,6 +222,51 @@ export default function StoryboardPage() {
     },
   });
 
+  const { data: callSheets } = useQuery<CallSheet[]>({
+    queryKey: ["/api/call-sheets", currentProject?.id],
+    enabled: !!currentProject?.id,
+  });
+
+  const handleCallSheetUpload = async () => {
+    if (!currentProject?.id || !callSheetTitle.trim() || !callSheetText.trim()) {
+      toast({
+        title: "请填写完整信息",
+        description: "通告单标题和内容不能为空",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingCallSheet(true);
+    try {
+      await apiRequest("POST", "/api/call-sheets/parse-text", {
+        projectId: currentProject.id,
+        title: callSheetTitle,
+        rawText: callSheetText,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/call-sheets", currentProject.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject.id] });
+      
+      toast({
+        title: "通告单已保存",
+        description: "场次信息已自动同步",
+      });
+      
+      setShowCallSheetDialog(false);
+      setCallSheetTitle("");
+      setCallSheetText("");
+    } catch (error) {
+      toast({
+        title: "保存失败",
+        description: "请稍后重试",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingCallSheet(false);
+    }
+  };
+
   const handleGenerate = () => {
     if (!selectedScene) {
       toast({
@@ -308,11 +361,26 @@ export default function StoryboardPage() {
 
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-2">
+            <Button 
+              variant="outline" 
+              className="w-full mb-4 border-dashed" 
+              onClick={() => setShowCallSheetDialog(true)}
+              data-testid="button-open-callsheet-dialog"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              添加通告单
+            </Button>
+            
             {scenes && scenes.length > 0 ? (
               scenes.map((scene) => (
                 <div
                   key={scene.id}
-                  onClick={() => setSelectedScene(scene)}
+                  onClick={() => {
+                    setSelectedScene(scene);
+                    if (scene.isInCallSheet) {
+                      setShowSceneDetails(true);
+                    }
+                  }}
                   className={`p-3 border rounded-md cursor-pointer transition-colors ${
                     selectedScene?.id === scene.id
                       ? "border-primary bg-primary/5"
@@ -814,6 +882,106 @@ export default function StoryboardPage() {
               data-testid="button-save-shot"
             >
               {updateShotMutation.isPending ? "保存中..." : "保存更改"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCallSheetDialog} onOpenChange={setShowCallSheetDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>添加通告单</DialogTitle>
+            <DialogDescription>
+              输入通告单信息，系统将自动识别场次并匹配剧本。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">标题</label>
+              <Input 
+                placeholder="例如：2024-01-11 拍摄通告" 
+                value={callSheetTitle}
+                onChange={(e) => setCallSheetTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">内容</label>
+              <Textarea 
+                placeholder="在此粘贴通告单文本，系统将识别类似'场次: 1, 3, 5'的信息..."
+                className="min-h-[200px]"
+                value={callSheetText}
+                onChange={(e) => setCallSheetText(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCallSheetDialog(false)}>取消</Button>
+            <Button onClick={handleCallSheetUpload} disabled={isUploadingCallSheet}>
+              {isUploadingCallSheet ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+              识别并保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSceneDetails} onOpenChange={setShowSceneDetails}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>场次详情: {selectedScene?.sceneNumber}</DialogTitle>
+            <DialogDescription>{selectedScene?.title}</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="flex-1 mt-4 pr-4">
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-muted/50 rounded-md">
+                  <p className="text-xs text-muted-foreground mb-1">地点</p>
+                  <p className="text-sm font-medium">{selectedScene?.location || "未指定"}</p>
+                </div>
+                <div className="p-3 bg-muted/50 rounded-md">
+                  <p className="text-xs text-muted-foreground mb-1">时间</p>
+                  <p className="text-sm font-medium">{selectedScene?.timeOfDay || "未指定"}</p>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  场景描述
+                </h3>
+                <div className="p-4 border rounded-md bg-background">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene?.description}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4" />
+                  动作
+                </h3>
+                <div className="p-4 border rounded-md bg-background">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene?.action}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  对白
+                </h3>
+                <div className="p-4 border rounded-md bg-background italic">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene?.dialogue}</p>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+          <DialogFooter className="mt-4">
+            <Button onClick={() => setShowSceneDetails(false)}>关闭</Button>
+            <Button variant="outline" onClick={() => {
+              setShowSceneDetails(false);
+              handleGenerate();
+            }}>
+              <Wand2 className="mr-2 h-4 w-4" />
+              基于此生成分镜
             </Button>
           </DialogFooter>
         </DialogContent>
