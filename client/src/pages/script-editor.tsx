@@ -322,20 +322,46 @@ export default function ScriptEditorPage() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">目标时长（分钟）</label>
+                          <label className="text-sm font-medium">
+                            {selectedType === "web_series" ? "单集时长（分钟）" : "目标时长（分钟）"}
+                          </label>
                           <Select value={targetDuration} onValueChange={setTargetDuration}>
                             <SelectTrigger data-testid="select-duration">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="1">1分钟（短视频）</SelectItem>
-                              <SelectItem value="3">3分钟（短片）</SelectItem>
-                              <SelectItem value="5">5分钟</SelectItem>
-                              <SelectItem value="15">15分钟</SelectItem>
-                              <SelectItem value="30">30分钟</SelectItem>
-                              <SelectItem value="60">60分钟</SelectItem>
-                              <SelectItem value="90">90分钟（电影）</SelectItem>
-                              <SelectItem value="120">120分钟</SelectItem>
+                              {selectedType === "web_series" ? (
+                                <>
+                                  <SelectItem value="15">15分钟/集</SelectItem>
+                                  <SelectItem value="20">20分钟/集</SelectItem>
+                                  <SelectItem value="30">30分钟/集</SelectItem>
+                                  <SelectItem value="45">45分钟/集</SelectItem>
+                                  <SelectItem value="60">60分钟/集</SelectItem>
+                                </>
+                              ) : selectedType === "short_video" || selectedType === "advertisement" ? (
+                                <>
+                                  <SelectItem value="0.5">30秒</SelectItem>
+                                  <SelectItem value="1">1分钟</SelectItem>
+                                  <SelectItem value="3">3分钟</SelectItem>
+                                  <SelectItem value="5">5分钟</SelectItem>
+                                </>
+                              ) : selectedType === "mv" ? (
+                                <>
+                                  <SelectItem value="3">3分钟</SelectItem>
+                                  <SelectItem value="4">4分钟</SelectItem>
+                                  <SelectItem value="5">5分钟</SelectItem>
+                                  <SelectItem value="6">6分钟</SelectItem>
+                                </>
+                              ) : (
+                                <>
+                                  <SelectItem value="5">5分钟</SelectItem>
+                                  <SelectItem value="15">15分钟</SelectItem>
+                                  <SelectItem value="30">30分钟</SelectItem>
+                                  <SelectItem value="60">60分钟</SelectItem>
+                                  <SelectItem value="90">90分钟</SelectItem>
+                                  <SelectItem value="120">120分钟</SelectItem>
+                                </>
+                              )}
                             </SelectContent>
                           </Select>
                         </div>
