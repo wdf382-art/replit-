@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import ScriptAnalysis from "@/pages/script-analysis";
 import Dashboard from "@/pages/dashboard";
 import ProjectsPage from "@/pages/projects";
 import ScriptEditorPage from "@/pages/script-editor";
@@ -21,6 +22,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/projects" component={ProjectsPage} />
+      <Route path="/projects/:id/analysis" component={ScriptAnalysis} />
       <Route path="/script" component={ScriptEditorPage} />
       <Route path="/storyboard" component={StoryboardPage} />
       <Route path="/performance" component={PerformancePage} />

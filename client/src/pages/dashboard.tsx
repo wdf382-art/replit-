@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import {
+import { 
   Plus,
   FileText,
   FolderOpen,
@@ -10,6 +10,7 @@ import {
   Film,
   Sparkles,
   LayoutGrid,
+  BarChart,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -148,7 +149,14 @@ export default function Dashboard() {
                             </span>
                           </div>
                         </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex items-center gap-2">
+                          <Link href={`/projects/${project.id}/analysis`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+                              <BarChart className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </div>
                       </div>
                     </Link>
                   ))}

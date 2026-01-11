@@ -1278,5 +1278,43 @@ ${content.substring(0, 8000)}
     }
   });
 
+  app.get("/api/projects/:id/analysis", async (req, res) => {
+    try {
+      const projectId = req.params.id;
+      const scenes = await storage.getScenes(projectId);
+      const characters = await storage.getCharacters(projectId);
+
+      // Character Dialogue Analysis
+      const characterDialogue = characters.map(char => {
+        let dialogueCount = 0;
+        scenes.forEach(scene => {
+          if (scene.dialogue?.includes(char.name)) {
+            // Very simple heuristic: count occurrences of name followed by colon or newline
+            const regex = new RegExp(`${char.name}[:：\\n]`, 'g');
+            dialogueCount += (scene.dialogue.match(regex) || []).length;
+          }
+        });
+        return {
+          name: char.name,
+          count: dialogueCount
+        };
+      }).filter(d => d.count > 0).sort((a, b) => b.count - a.count);
+
+      // Scene Duration Analysis
+      const sceneDurations = scenes.map(scene => ({
+        sceneNumber: scene.sceneNumber,
+        duration: scene.duration || (scene.action?.length || 0) / 10 + (scene.dialogue?.length || 0) / 5 || 30 // Fallback estimate in seconds
+      }));
+
+      res.json({
+        characterDialogue,
+        sceneDurations
+      });
+    } catch (error) {
+      console.error("Error analyzing project:", error);
+      res.status(500).json({ error: "Failed to analyze project" });
+    }
+  });
+
   return httpServer;
 }
