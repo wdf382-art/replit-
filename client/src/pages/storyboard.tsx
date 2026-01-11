@@ -268,31 +268,11 @@ export default function StoryboardPage() {
       if (response.sceneNumbers && response.sceneNumbers.length > 0) {
         console.log("Auto-creating or updating scenes from call sheet:", response.sceneNumbers);
         
-        // Match with existing script scenes if they exist
-        await Promise.all(response.sceneNumbers.map(async (num: number) => {
-          // Find if a scene with this number already exists for the project
-          const existingScene = scenes?.find(s => s.sceneNumber === num);
-          
-          if (existingScene) {
-            // Update existing scene to show it's in the call sheet
-            return apiRequest("PATCH", `/api/scenes/${existingScene.id}`, {
-              isInCallSheet: true
-            }).catch(err => console.error(`Failed to update scene ${num}:`, err));
-          } else {
-            // Create new scene if not found
-            return apiRequest("POST", "/api/scenes", {
-              projectId: currentProject.id,
-              sceneNumber: num,
-              title: `第 ${num} 场 (通告单识别)`,
-              isInCallSheet: true
-            }).catch(err => console.error(`Failed to create scene ${num}:`, err));
-          }
-        }));
+        // Invalidate queries to refresh the scene list
+        await queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject.id] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/call-sheets", currentProject.id] });
       }
 
-      queryClient.invalidateQueries({ queryKey: ["/api/call-sheets", currentProject.id] });
-      queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject.id] });
-      
       toast({
         title: "通告单已保存",
         description: "场次信息已自动同步",
@@ -470,6 +450,42 @@ export default function StoryboardPage() {
                     <p className="text-xs text-muted-foreground mt-1">
                       {scene.location} {scene.timeOfDay && `- ${scene.timeOfDay}`}
                     </p>
+                  )}
+                  {selectedScene?.id === scene.id && (
+                    <div className="mt-3 pt-3 border-t space-y-2 animate-in fade-in slide-in-from-top-1">
+                      {scene.description && (
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">场景描述</p>
+                          <p className="text-xs line-clamp-3 mt-0.5">{scene.description}</p>
+                        </div>
+                      )}
+                      {scene.dialogue && (
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">对白</p>
+                          <p className="text-xs line-clamp-3 mt-0.5 italic">{scene.dialogue}</p>
+                        </div>
+                      )}
+                      {scene.action && (
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">动作描写</p>
+                          <p className="text-xs line-clamp-3 mt-0.5">{scene.action}</p>
+                        </div>
+                      )}
+                      {!scene.description && !scene.dialogue && !scene.action && (
+                        <p className="text-[10px] text-muted-foreground italic">暂无剧本详情</p>
+                      )}
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="w-full h-7 text-[10px] mt-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowSceneDetails(true);
+                        }}
+                      >
+                        查看完整详情
+                      </Button>
+                    </div>
                   )}
                 </div>
               ))

@@ -1098,10 +1098,42 @@ ${content.substring(0, 8000)}
       const allProjectScenes = await storage.getScenes(projectId);
       console.log(`Found ${allProjectScenes.length} total scenes in project`);
 
-      for (const scene of allProjectScenes) {
-        if (sceneNumbers.includes(scene.sceneNumber)) {
-          console.log(`Updating scene ${scene.sceneNumber} (ID: ${scene.id}) to isInCallSheet: true`);
-          await storage.updateScene(scene.id, { isInCallSheet: true });
+      // 获取当前活动的剧本，用于关联 scriptId
+      const scripts = await storage.getScripts(projectId);
+      const activeScript = scripts.find(s => s.isActive);
+      
+      // 获取剧本中的所有场次
+      let scriptScenes: any[] = [];
+      if (activeScript) {
+        scriptScenes = await storage.getScenes(projectId);
+        // 确保这些场次是属于该剧本的
+        scriptScenes = scriptScenes.filter(s => s.scriptId === activeScript.id);
+      }
+
+      for (const sceneNum of sceneNumbers) {
+        // 首先尝试匹配剧本中的场次
+        let existingScene = scriptScenes.find(s => s.sceneNumber === sceneNum);
+        
+        // 如果剧本中没有，再看项目里有没有（可能是手动创建的）
+        if (!existingScene) {
+          existingScene = allProjectScenes.find(s => s.sceneNumber === sceneNum);
+        }
+
+        if (existingScene) {
+          console.log(`Updating scene ${sceneNum} (ID: ${existingScene.id}) to isInCallSheet: true`);
+          await storage.updateScene(existingScene.id, { 
+            isInCallSheet: true,
+            scriptId: activeScript?.id || existingScene.scriptId 
+          });
+        } else {
+          console.log(`Creating new scene ${sceneNum} for call sheet`);
+          await storage.createScene({
+            projectId,
+            sceneNumber: sceneNum,
+            title: `第 ${sceneNum} 场 (通告单识别)`,
+            isInCallSheet: true,
+            scriptId: activeScript?.id || null,
+          });
         }
       }
 
