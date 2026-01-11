@@ -190,6 +190,54 @@ export const insertShotSchema = createInsertSchema(shots).omit({
 export type InsertShot = z.infer<typeof insertShotSchema>;
 export type Shot = typeof shots.$inferSelect;
 
+// Script version history table
+export const scriptVersions = pgTable("script_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scriptId: varchar("script_id").notNull().references(() => scripts.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  version: integer("version").notNull(),
+  changeDescription: text("change_description"),
+  changedBy: text("changed_by"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertScriptVersionSchema = createInsertSchema(scriptVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertScriptVersion = z.infer<typeof insertScriptVersionSchema>;
+export type ScriptVersion = typeof scriptVersions.$inferSelect;
+
+// Shot version history table
+export const shotVersions = pgTable("shot_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shotId: varchar("shot_id").notNull().references(() => shots.id, { onDelete: "cascade" }),
+  sceneId: varchar("scene_id").notNull().references(() => scenes.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  shotType: text("shot_type").$type<ShotType>(),
+  cameraAngle: text("camera_angle").$type<CameraAngle>(),
+  cameraMovement: text("camera_movement").$type<CameraMovement>(),
+  duration: integer("duration"),
+  atmosphere: text("atmosphere"),
+  notes: text("notes"),
+  imageUrl: text("image_url"),
+  imageBase64: text("image_base64"),
+  version: integer("version").notNull(),
+  changeDescription: text("change_description"),
+  changedBy: text("changed_by"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertShotVersionSchema = createInsertSchema(shotVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertShotVersion = z.infer<typeof insertShotVersionSchema>;
+export type ShotVersion = typeof shotVersions.$inferSelect;
+
 // Characters table
 export const characters = pgTable("characters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

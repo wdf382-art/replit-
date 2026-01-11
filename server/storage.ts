@@ -20,6 +20,10 @@ import type {
   InsertProductionNotes,
   CallSheet,
   InsertCallSheet,
+  ScriptVersion,
+  InsertScriptVersion,
+  ShotVersion,
+  InsertShotVersion,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -72,6 +76,14 @@ export interface IStorage {
 
   getCallSheets(projectId: string): Promise<CallSheet[]>;
   createCallSheet(callSheet: InsertCallSheet): Promise<CallSheet>;
+
+  getScriptVersions(scriptId: string): Promise<ScriptVersion[]>;
+  createScriptVersion(version: InsertScriptVersion): Promise<ScriptVersion>;
+  restoreScriptVersion(scriptId: string, versionId: string): Promise<Script | undefined>;
+
+  getShotVersions(shotId: string): Promise<ShotVersion[]>;
+  createShotVersion(version: InsertShotVersion): Promise<ShotVersion>;
+  restoreShotVersion(shotId: string, versionId: string): Promise<Shot | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -85,6 +97,8 @@ export class MemStorage implements IStorage {
   private sceneAnalyses: Map<string, SceneAnalysis>;
   private productionNotes: Map<string, ProductionNotes>;
   private callSheets: Map<string, CallSheet>;
+  private scriptVersions: Map<string, ScriptVersion>;
+  private shotVersions: Map<string, ShotVersion>;
 
   constructor() {
     this.users = new Map();
@@ -97,6 +111,8 @@ export class MemStorage implements IStorage {
     this.sceneAnalyses = new Map();
     this.productionNotes = new Map();
     this.callSheets = new Map();
+    this.scriptVersions = new Map();
+    this.shotVersions = new Map();
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -471,6 +487,118 @@ export class MemStorage implements IStorage {
     };
     this.callSheets.set(id, callSheet);
     return callSheet;
+  }
+
+  async getScriptVersions(scriptId: string): Promise<ScriptVersion[]> {
+    return Array.from(this.scriptVersions.values())
+      .filter((v) => v.scriptId === scriptId)
+      .sort((a, b) => b.version - a.version);
+  }
+
+  async createScriptVersion(insertVersion: InsertScriptVersion): Promise<ScriptVersion> {
+    const id = randomUUID();
+    const version: ScriptVersion = {
+      ...insertVersion,
+      id,
+      changeDescription: insertVersion.changeDescription || null,
+      changedBy: insertVersion.changedBy || null,
+      createdAt: new Date(),
+    };
+    this.scriptVersions.set(id, version);
+    return version;
+  }
+
+  async restoreScriptVersion(scriptId: string, versionId: string): Promise<Script | undefined> {
+    const version = this.scriptVersions.get(versionId);
+    if (!version || version.scriptId !== scriptId) return undefined;
+    
+    const script = this.scripts.get(scriptId);
+    if (!script) return undefined;
+
+    const currentVersion = script.version;
+    await this.createScriptVersion({
+      scriptId,
+      projectId: script.projectId,
+      content: script.content,
+      version: currentVersion,
+      changeDescription: `恢复前自动保存 v${currentVersion}`,
+    });
+
+    const updated: Script = {
+      ...script,
+      content: version.content,
+      version: currentVersion + 1,
+    };
+    this.scripts.set(scriptId, updated);
+    return updated;
+  }
+
+  async getShotVersions(shotId: string): Promise<ShotVersion[]> {
+    return Array.from(this.shotVersions.values())
+      .filter((v) => v.shotId === shotId)
+      .sort((a, b) => b.version - a.version);
+  }
+
+  async createShotVersion(insertVersion: InsertShotVersion): Promise<ShotVersion> {
+    const id = randomUUID();
+    const version: ShotVersion = {
+      ...insertVersion,
+      id,
+      shotType: insertVersion.shotType || null,
+      cameraAngle: insertVersion.cameraAngle || null,
+      cameraMovement: insertVersion.cameraMovement || null,
+      duration: insertVersion.duration || null,
+      atmosphere: insertVersion.atmosphere || null,
+      notes: insertVersion.notes || null,
+      imageUrl: insertVersion.imageUrl || null,
+      imageBase64: insertVersion.imageBase64 || null,
+      changeDescription: insertVersion.changeDescription || null,
+      changedBy: insertVersion.changedBy || null,
+      createdAt: new Date(),
+    };
+    this.shotVersions.set(id, version);
+    return version;
+  }
+
+  async restoreShotVersion(shotId: string, versionId: string): Promise<Shot | undefined> {
+    const version = this.shotVersions.get(versionId);
+    if (!version || version.shotId !== shotId) return undefined;
+    
+    const shot = this.shots.get(shotId);
+    if (!shot) return undefined;
+
+    const currentVersion = shot.version;
+    await this.createShotVersion({
+      shotId,
+      sceneId: shot.sceneId,
+      description: shot.description,
+      shotType: shot.shotType,
+      cameraAngle: shot.cameraAngle,
+      cameraMovement: shot.cameraMovement,
+      duration: shot.duration,
+      atmosphere: shot.atmosphere,
+      notes: shot.notes,
+      imageUrl: shot.imageUrl,
+      imageBase64: shot.imageBase64,
+      version: currentVersion,
+      changeDescription: `恢复前自动保存 v${currentVersion}`,
+    });
+
+    const updated: Shot = {
+      ...shot,
+      description: version.description,
+      shotType: version.shotType,
+      cameraAngle: version.cameraAngle,
+      cameraMovement: version.cameraMovement,
+      duration: version.duration,
+      atmosphere: version.atmosphere,
+      notes: version.notes,
+      imageUrl: version.imageUrl,
+      imageBase64: version.imageBase64,
+      version: currentVersion + 1,
+    };
+    this.shots.set(shotId, updated);
+    return updated;
   }
 }
 
