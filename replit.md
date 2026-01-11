@@ -35,11 +35,20 @@ The server includes replit_integrations modules providing:
 
 ### Data Layer
 - **ORM**: Drizzle ORM with PostgreSQL dialect
+- **Database Connection**: `server/db.ts` - Drizzle connection using pg Pool
+- **Storage**: `server/storage.ts` - DatabaseStorage class implementing IStorage interface for PostgreSQL persistence
 - **Schema Location**: `shared/schema.ts` (shared between client and server)
 - **Validation**: Zod schemas generated from Drizzle schemas via drizzle-zod
 - **Migrations**: Drizzle Kit with `db:push` command
 
 Core entities include: Users, Projects, Scripts, Scenes, Shots, Characters, PerformanceGuides, SceneAnalysis, ProductionNotes, CallSheets, ScriptVersions, and ShotVersions. Projects support multiple types (advertisement, short_video, movie, web_series, micro_film, documentary, mv) with configurable director styles and visual styles.
+
+### Call Sheet & Scene Content Extraction
+The application supports automated scene creation from call sheets (通告单):
+- **Call Sheet Parsing**: Supports multiple scene number formats: "场次: 1, 2, 3", "第X场", "X-Y", comma-separated lists
+- **Scene Content Extraction**: When call sheet identifies scene numbers, system extracts content directly from script raw text using regex patterns
+- **Extracted Fields**: location (场地), timeOfDay (日/夜), dialogue (角色对白), action (△ 动作描写)
+- **Pattern Matching**: Supports "第N场 场地 时间 内/外" format with flexible whitespace handling
 
 ### Version Control System
 The application implements version history tracking for both scripts and shots:
