@@ -420,7 +420,7 @@ export default function ScriptEditorPage() {
                         上传剧本文件
                       </CardTitle>
                       <CardDescription>
-                        上传已有的剧本文件，支持 .txt、.md、.fountain 格式
+                        上传已有的剧本文件，支持 .txt、.md、.fountain、.docx 格式
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -444,7 +444,7 @@ export default function ScriptEditorPage() {
                         <input
                           id="file-upload"
                           type="file"
-                          accept=".txt,.md,.fountain"
+                          accept=".txt,.md,.fountain,.docx"
                           className="hidden"
                           onChange={(e) => {
                             const files = e.target.files;
@@ -478,7 +478,7 @@ export default function ScriptEditorPage() {
                             <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
                             <p className="font-medium">点击选择或拖拽文件到此处</p>
                             <p className="text-sm text-muted-foreground">
-                              支持 .txt、.md、.fountain 格式，最大 5MB
+                              支持 .txt、.md、.fountain、.docx 格式，最大 10MB
                             </p>
                           </div>
                         )}
