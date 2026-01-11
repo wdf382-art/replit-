@@ -38,9 +38,18 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
-import type { Project, Script, Scene, ProjectType, CallSheet } from "@shared/schema";
+import type { Project, Script, Scene, ProjectType, CallSheet, ScriptVersion } from "@shared/schema";
 import { projectTypes, projectTypeInfo } from "@shared/schema";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { format } from "date-fns";
 
 export default function ScriptEditorPage() {
   const [location] = useLocation();
@@ -63,6 +72,9 @@ export default function ScriptEditorPage() {
   const [callSheetInputMode, setCallSheetInputMode] = useState<"upload" | "manual">("upload");
   const [isUploadingCallSheet, setIsUploadingCallSheet] = useState(false);
   const [, setLocation] = useLocation();
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<ScriptVersion | null>(null);
+  const [confirmRestore, setConfirmRestore] = useState(false);
 
   const projectId = new URLSearchParams(location.split("?")[1] || "").get("project");
 
@@ -83,6 +95,65 @@ export default function ScriptEditorPage() {
   const { data: callSheets } = useQuery<CallSheet[]>({
     queryKey: ["/api/call-sheets", currentProject?.id],
     enabled: !!currentProject?.id,
+  });
+
+  const currentScript = scripts?.[0];
+
+  const { data: scriptVersions } = useQuery<ScriptVersion[]>({
+    queryKey: ["/api/scripts", currentScript?.id, "versions"],
+    enabled: !!currentScript?.id,
+    queryFn: async () => {
+      const response = await fetch(`/api/scripts/${currentScript?.id}/versions`);
+      if (!response.ok) throw new Error("Failed to fetch versions");
+      return response.json();
+    },
+  });
+
+  const saveVersionMutation = useMutation({
+    mutationFn: async (description?: string) => {
+      if (!currentScript) return;
+      return apiRequest("POST", `/api/scripts/${currentScript.id}/versions`, {
+        changeDescription: description || "手动保存版本",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scripts", currentScript?.id, "versions"] });
+      toast({
+        title: "版本已保存",
+        description: "当前剧本版本已保存到历史记录",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "保存失败",
+        description: "无法保存版本，请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const restoreVersionMutation = useMutation({
+    mutationFn: async (versionId: string) => {
+      if (!currentScript) return;
+      return apiRequest("POST", `/api/scripts/${currentScript.id}/versions/${versionId}/restore`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scripts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/scripts", currentScript?.id, "versions"] });
+      setConfirmRestore(false);
+      setSelectedVersion(null);
+      toast({
+        title: "版本已恢复",
+        description: "剧本已恢复到选定版本",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "恢复失败",
+        description: "无法恢复版本，请稍后重试",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleCallSheetUpload = async () => {
@@ -871,10 +942,110 @@ export default function ScriptEditorPage() {
                   </CardContent>
                 </Card>
               </div>
+
+              <div>
+                <h3 className="font-medium mb-3 flex items-center gap-2">
+                  <History className="h-4 w-4 text-primary" />
+                  版本历史
+                </h3>
+                {currentScript ? (
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => saveVersionMutation.mutate()}
+                      disabled={saveVersionMutation.isPending}
+                      data-testid="button-save-version"
+                    >
+                      {saveVersionMutation.isPending ? (
+                        <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                      ) : (
+                        <Save className="mr-2 h-3 w-3" />
+                      )}
+                      保存当前版本
+                    </Button>
+                    
+                    {scriptVersions && scriptVersions.length > 0 ? (
+                      <ScrollArea className="h-48">
+                        <div className="space-y-2">
+                          {scriptVersions.map((version) => (
+                            <div
+                              key={version.id}
+                              className="p-2 border rounded-md hover-elevate cursor-pointer text-sm"
+                              onClick={() => {
+                                setSelectedVersion(version);
+                                setConfirmRestore(true);
+                              }}
+                              data-testid={`version-${version.id}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <Badge variant="secondary" className="text-xs">
+                                  v{version.version}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {format(new Date(version.createdAt), "MM/dd HH:mm")}
+                                </span>
+                              </div>
+                              {version.changeDescription && (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                                  {version.changeDescription}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        暂无版本历史
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    生成剧本后可保存版本
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <Dialog open={confirmRestore} onOpenChange={setConfirmRestore}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认恢复版本</DialogTitle>
+            <DialogDescription>
+              您确定要将剧本恢复到版本 v{selectedVersion?.version} 吗？当前版本将自动保存到历史记录中。
+            </DialogDescription>
+          </DialogHeader>
+          {selectedVersion && (
+            <div className="border rounded-md p-3 bg-muted/50 max-h-48 overflow-auto">
+              <p className="text-sm font-mono whitespace-pre-wrap line-clamp-6">
+                {selectedVersion.content.substring(0, 500)}
+                {selectedVersion.content.length > 500 && "..."}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRestore(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => selectedVersion && restoreVersionMutation.mutate(selectedVersion.id)}
+              disabled={restoreVersionMutation.isPending}
+              data-testid="button-confirm-restore"
+            >
+              {restoreVersionMutation.isPending ? (
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              确认恢复
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

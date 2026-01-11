@@ -46,7 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
-import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio } from "@shared/schema";
+import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio, ShotVersion } from "@shared/schema";
 import {
   directorStyles,
   directorStyleInfo,
@@ -61,6 +61,8 @@ import {
   aspectRatios,
 } from "@shared/schema";
 import { Input } from "@/components/ui/input";
+import { format } from "date-fns";
+import { History, Save } from "lucide-react";
 
 export default function StoryboardPage() {
   const { toast } = useToast();
@@ -78,6 +80,9 @@ export default function StoryboardPage() {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [editingShotId, setEditingShotId] = useState<string | null>(null);
   const [shotEdits, setShotEdits] = useState<Partial<Shot>>({});
+  const [showShotVersions, setShowShotVersions] = useState(false);
+  const [selectedShotVersion, setSelectedShotVersion] = useState<ShotVersion | null>(null);
+  const [confirmRestoreShot, setConfirmRestoreShot] = useState(false);
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -136,6 +141,7 @@ export default function StoryboardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shots", editingShotId, "versions"] });
       setEditingShotId(null);
       setShotEdits({});
       toast({
@@ -147,6 +153,62 @@ export default function StoryboardPage() {
       toast({
         title: "更新失败",
         description: "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const { data: shotVersions } = useQuery<ShotVersion[]>({
+    queryKey: ["/api/shots", editingShotId, "versions"],
+    enabled: !!editingShotId,
+    queryFn: async () => {
+      const response = await fetch(`/api/shots/${editingShotId}/versions`);
+      if (!response.ok) throw new Error("Failed to fetch versions");
+      return response.json();
+    },
+  });
+
+  const saveShotVersionMutation = useMutation({
+    mutationFn: async (shotId: string) => {
+      return apiRequest("POST", `/api/shots/${shotId}/versions`, {
+        changeDescription: "手动保存版本",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shots", editingShotId, "versions"] });
+      toast({
+        title: "版本已保存",
+        description: "当前分镜版本已保存",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "保存失败",
+        description: "无法保存版本",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const restoreShotVersionMutation = useMutation({
+    mutationFn: async ({ shotId, versionId }: { shotId: string; versionId: string }) => {
+      return apiRequest("POST", `/api/shots/${shotId}/versions/${versionId}/restore`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shots", editingShotId, "versions"] });
+      setConfirmRestoreShot(false);
+      setSelectedShotVersion(null);
+      setShowShotVersions(false);
+      toast({
+        title: "版本已恢复",
+        description: "分镜已恢复到选定版本",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "恢复失败",
+        description: "无法恢复版本",
         variant: "destructive",
       });
     },
@@ -668,6 +730,71 @@ export default function StoryboardPage() {
                 data-testid="input-shot-atmosphere"
               />
             </div>
+
+            <Collapsible open={showShotVersions} onOpenChange={setShowShotVersions}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full">
+                  <History className="mr-2 h-4 w-4" />
+                  版本历史
+                  <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${showShotVersions ? "rotate-180" : ""}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2">
+                <div className="space-y-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => editingShotId && saveShotVersionMutation.mutate(editingShotId)}
+                    disabled={saveShotVersionMutation.isPending}
+                    data-testid="button-save-shot-version"
+                  >
+                    {saveShotVersionMutation.isPending ? (
+                      <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-3 w-3" />
+                    )}
+                    保存当前版本
+                  </Button>
+                  
+                  {shotVersions && shotVersions.length > 0 ? (
+                    <ScrollArea className="h-32">
+                      <div className="space-y-2">
+                        {shotVersions.map((version) => (
+                          <div
+                            key={version.id}
+                            className="p-2 border rounded-md hover-elevate cursor-pointer text-sm"
+                            onClick={() => {
+                              setSelectedShotVersion(version);
+                              setConfirmRestoreShot(true);
+                            }}
+                            data-testid={`shot-version-${version.id}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <Badge variant="secondary" className="text-xs">
+                                v{version.version}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(version.createdAt), "MM/dd HH:mm")}
+                              </span>
+                            </div>
+                            {version.changeDescription && (
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                                {version.changeDescription}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-2">
+                      暂无版本历史
+                    </p>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
 
           <DialogFooter>
@@ -687,6 +814,46 @@ export default function StoryboardPage() {
               data-testid="button-save-shot"
             >
               {updateShotMutation.isPending ? "保存中..." : "保存更改"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmRestoreShot} onOpenChange={setConfirmRestoreShot}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认恢复版本</DialogTitle>
+            <DialogDescription>
+              您确定要将分镜恢复到版本 v{selectedShotVersion?.version} 吗？当前版本将自动保存到历史记录中。
+            </DialogDescription>
+          </DialogHeader>
+          {selectedShotVersion && (
+            <div className="border rounded-md p-3 bg-muted/50">
+              <p className="text-sm whitespace-pre-wrap line-clamp-4">
+                {selectedShotVersion.description}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRestoreShot(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedShotVersion && editingShotId) {
+                  restoreShotVersionMutation.mutate({
+                    shotId: editingShotId,
+                    versionId: selectedShotVersion.id,
+                  });
+                }
+              }}
+              disabled={restoreShotVersionMutation.isPending}
+              data-testid="button-confirm-restore-shot"
+            >
+              {restoreShotVersionMutation.isPending ? (
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              确认恢复
             </Button>
           </DialogFooter>
         </DialogContent>
