@@ -90,9 +90,13 @@ export default function StoryboardPage() {
   const [callSheetTitle, setCallSheetTitle] = useState("");
   const [callSheetText, setCallSheetText] = useState("");
   const [isUploadingCallSheet, setIsUploadingCallSheet] = useState(false);
-  const [showSceneDetails, setShowSceneDetails] = useState(false);
+    const [showSceneDetails, setShowSceneDetails] = useState(false);
+    const [showCreateSceneDialog, setShowCreateSceneDialog] = useState(false);
+    const [newSceneNumber, setNewSceneNumber] = useState("");
+    const [newSceneTitle, setNewSceneTitle] = useState("");
+    const [isCreatingScene, setIsCreatingScene] = useState(false);
 
-  const { data: projects } = useQuery<Project[]>({
+    const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
   });
 
@@ -371,12 +375,22 @@ export default function StoryboardPage() {
           <div className="p-4 space-y-2">
             <Button 
               variant="outline" 
-              className="w-full mb-4 border-dashed" 
+              className="w-full mb-2 border-dashed" 
               onClick={() => setShowCallSheetDialog(true)}
               data-testid="button-open-callsheet-dialog"
             >
               <Plus className="mr-2 h-4 w-4" />
               添加通告单
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="w-full mb-4 border-dashed" 
+              onClick={() => setShowCreateSceneDialog(true)}
+              data-testid="button-open-create-scene-dialog"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              手动添加场次
             </Button>
             
             {scenes && scenes.length > 0 ? (
@@ -887,6 +901,66 @@ export default function StoryboardPage() {
               data-testid="button-save-shot"
             >
               {updateShotMutation.isPending ? "保存中..." : "保存更改"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCreateSceneDialog} onOpenChange={setShowCreateSceneDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>手动添加场次</DialogTitle>
+            <DialogDescription>
+              手动输入场次号和标题，直接为该场次设计分镜。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">场次号</label>
+              <Input 
+                type="number" 
+                placeholder="例如: 1" 
+                value={newSceneNumber}
+                onChange={(e) => setNewSceneNumber(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">场次标题</label>
+              <Input 
+                placeholder="例如: 医院走廊" 
+                value={newSceneTitle}
+                onChange={(e) => setNewSceneTitle(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateSceneDialog(false)}>取消</Button>
+            <Button 
+              disabled={isCreatingScene || !newSceneNumber || !newSceneTitle || !currentProject?.id}
+              onClick={async () => {
+                if (!currentProject?.id) return;
+                setIsCreatingScene(true);
+                try {
+                  const scene = await apiRequest("POST", "/api/scenes", {
+                    projectId: currentProject.id,
+                    sceneNumber: parseInt(newSceneNumber),
+                    title: newSceneTitle,
+                    isInCallSheet: true
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject.id] });
+                  setSelectedScene(scene);
+                  setShowCreateSceneDialog(false);
+                  setNewSceneNumber("");
+                  setNewSceneTitle("");
+                  toast({ title: "场次添加成功", description: "现在可以为该场次生成分镜了" });
+                } catch (error) {
+                  toast({ title: "添加失败", description: "请稍后重试", variant: "destructive" });
+                } finally {
+                  setIsCreatingScene(false);
+                }
+              }}
+            >
+              {isCreatingScene ? "创建中..." : "确定添加"}
             </Button>
           </DialogFooter>
         </DialogContent>

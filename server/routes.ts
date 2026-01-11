@@ -454,6 +454,20 @@ ${content.substring(0, 8000)}
     }
   });
 
+  app.post("/api/scenes", async (req, res) => {
+    try {
+      const parsed = insertSceneSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const scene = await storage.createScene(parsed.data);
+      res.status(201).json(scene);
+    } catch (error) {
+      console.error("Error creating scene:", error);
+      res.status(500).json({ error: "Failed to create scene" });
+    }
+  });
+
   app.get("/api/shots", async (req, res) => {
     try {
       const sceneId = req.query.sceneId as string;
