@@ -1111,28 +1111,55 @@ ${content.substring(0, 8000)}
       }
 
       for (const sceneNum of sceneNumbers) {
-        // 首先尝试匹配剧本中的场次
-        let existingScene = scriptScenes.find(s => s.sceneNumber === sceneNum);
-        
-        // 如果剧本中没有，再看项目里有没有（可能是手动创建的）
-        if (!existingScene) {
-          existingScene = allProjectScenes.find(s => s.sceneNumber === sceneNum);
-        }
+        // 首先尝试从现有场景中查找匹配场次（不论是否在剧本中）
+        let existingScene = allProjectScenes.find(s => s.sceneNumber === sceneNum);
 
         if (existingScene) {
           console.log(`Updating scene ${sceneNum} (ID: ${existingScene.id}) to isInCallSheet: true`);
-          await storage.updateScene(existingScene.id, { 
+          // 核心修复：如果现有场景缺乏内容，尝试从剧本中的同场次场景复制内容
+          const sceneUpdate: any = { 
             isInCallSheet: true,
             scriptId: activeScript?.id || existingScene.scriptId 
-          });
+          };
+
+          // 如果当前场景没有详情，尝试在项目中寻找有详情的同号场次
+          if (!existingScene.description && !existingScene.dialogue && !existingScene.action) {
+            const sourceScene = allProjectScenes.find(s => 
+              s.sceneNumber === sceneNum && 
+              (s.description || s.dialogue || s.action)
+            );
+            if (sourceScene) {
+              sceneUpdate.title = sourceScene.title;
+              sceneUpdate.location = sourceScene.location;
+              sceneUpdate.timeOfDay = sourceScene.timeOfDay;
+              sceneUpdate.description = sourceScene.description;
+              sceneUpdate.dialogue = sourceScene.dialogue;
+              sceneUpdate.action = sourceScene.action;
+              sceneUpdate.duration = sourceScene.duration;
+            }
+          }
+          
+          await storage.updateScene(existingScene.id, sceneUpdate);
         } else {
           console.log(`Creating new scene ${sceneNum} for call sheet`);
+          // 查找是否有带剧本内容的场次可以作为模板
+          const sourceScene = allProjectScenes.find(s => 
+            s.sceneNumber === sceneNum && 
+            (s.description || s.dialogue || s.action)
+          );
+
           await storage.createScene({
             projectId,
             sceneNumber: sceneNum,
-            title: `第 ${sceneNum} 场 (通告单识别)`,
+            title: sourceScene?.title || `第 ${sceneNum} 场 (通告单识别)`,
+            location: sourceScene?.location || null,
+            timeOfDay: sourceScene?.timeOfDay || null,
+            description: sourceScene?.description || null,
+            dialogue: sourceScene?.dialogue || null,
+            action: sourceScene?.action || null,
+            duration: sourceScene?.duration || null,
             isInCallSheet: true,
-            scriptId: activeScript?.id || null,
+            scriptId: activeScript?.id || sourceScene?.scriptId || null,
           });
         }
       }
