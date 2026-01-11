@@ -358,9 +358,24 @@ export default function StoryboardPage() {
   return (
     <div className="flex-1 flex overflow-hidden">
       <div className="w-72 border-r overflow-hidden flex flex-col">
-        <div className="p-4 border-b">
+        <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold">场次列表</h2>
-          <p className="text-xs text-muted-foreground mt-1">选择要生成分镜的场次</p>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8"
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject?.id] });
+              queryClient.invalidateQueries({ queryKey: ["/api/call-sheets", currentProject?.id] });
+              toast({
+                title: "已刷新",
+                description: "场次列表已更新",
+              });
+            }}
+            data-testid="button-refresh-scenes"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </div>
         
         <div className="p-4 border-b">
@@ -439,7 +454,7 @@ export default function StoryboardPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm">场次 {scene.sceneNumber}</span>
-                    {scene.isInCallSheet && (
+                    {scene.isInCallSheet && !scene.description && !scene.dialogue && !scene.action && (
                       <Badge variant="default" className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm transition-all">识别中</Badge>
                     )}
                   </div>
