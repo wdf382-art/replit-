@@ -239,7 +239,15 @@ export default function StoryboardPage() {
   });
 
   const handleCallSheetUpload = async () => {
-    if (!currentProject?.id || !callSheetTitle.trim() || !callSheetText.trim()) {
+    if (!currentProject?.id) {
+      toast({
+        title: "请先选择项目",
+        description: "请在左侧项目管理中选择一个项目",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!callSheetTitle.trim() || !callSheetText.trim()) {
       toast({
         title: "请填写完整信息",
         description: "通告单标题和内容不能为空",

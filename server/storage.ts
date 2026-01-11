@@ -1,3 +1,19 @@
+import { db } from "./db";
+import {
+  users,
+  projects,
+  scripts,
+  scenes,
+  shots,
+  characters,
+  performanceGuides,
+  sceneAnalysis,
+  productionNotes,
+  callSheets,
+  scriptVersions,
+  shotVersions,
+} from "@shared/schema";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import type {
   User,
@@ -84,6 +100,400 @@ export interface IStorage {
   getShotVersions(shotId: string): Promise<ShotVersion[]>;
   createShotVersion(version: InsertShotVersion): Promise<ShotVersion>;
   restoreShotVersion(shotId: string, versionId: string): Promise<Shot | undefined>;
+}
+
+export class DatabaseStorage implements IStorage {
+  async getUser(id: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.username, username));
+    return result[0];
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const result = await db.insert(users).values(insertUser).returning();
+    return result[0];
+  }
+
+  async getProjects(): Promise<Project[]> {
+    return db.select().from(projects).orderBy(desc(projects.createdAt));
+  }
+
+  async getProject(id: string): Promise<Project | undefined> {
+    const result = await db.select().from(projects).where(eq(projects.id, id));
+    return result[0];
+  }
+
+  async createProject(insertProject: InsertProject): Promise<Project> {
+    const result = await db.insert(projects).values(insertProject).returning();
+    return result[0];
+  }
+
+  async updateProject(id: string, updates: Partial<InsertProject>): Promise<Project | undefined> {
+    const result = await db
+      .update(projects)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(projects.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await db.delete(projects).where(eq(projects.id, id));
+  }
+
+  async getScripts(projectId: string): Promise<Script[]> {
+    return db
+      .select()
+      .from(scripts)
+      .where(eq(scripts.projectId, projectId))
+      .orderBy(desc(scripts.version));
+  }
+
+  async getScript(id: string): Promise<Script | undefined> {
+    const result = await db.select().from(scripts).where(eq(scripts.id, id));
+    return result[0];
+  }
+
+  async createScript(insertScript: InsertScript): Promise<Script> {
+    const existingScripts = await this.getScripts(insertScript.projectId);
+    const version = existingScripts.length > 0 ? Math.max(...existingScripts.map((s) => s.version)) + 1 : 1;
+
+    for (const script of existingScripts) {
+      if (script.isActive) {
+        await db.update(scripts).set({ isActive: false }).where(eq(scripts.id, script.id));
+      }
+    }
+
+    const result = await db
+      .insert(scripts)
+      .values({
+        ...insertScript,
+        version,
+        isActive: insertScript.isActive ?? true,
+      })
+      .returning();
+    return result[0];
+  }
+
+  async updateScript(id: string, updates: Partial<InsertScript>): Promise<Script | undefined> {
+    const result = await db.update(scripts).set(updates).where(eq(scripts.id, id)).returning();
+    return result[0];
+  }
+
+  async getScenes(projectId: string): Promise<Scene[]> {
+    return db
+      .select()
+      .from(scenes)
+      .where(eq(scenes.projectId, projectId))
+      .orderBy(asc(scenes.sceneNumber));
+  }
+
+  async getScene(id: string): Promise<Scene | undefined> {
+    const result = await db.select().from(scenes).where(eq(scenes.id, id));
+    return result[0];
+  }
+
+  async createScene(insertScene: InsertScene): Promise<Scene> {
+    const result = await db.insert(scenes).values(insertScene).returning();
+    return result[0];
+  }
+
+  async updateScene(id: string, updates: Partial<InsertScene>): Promise<Scene | undefined> {
+    const result = await db.update(scenes).set(updates).where(eq(scenes.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteScene(id: string): Promise<void> {
+    await db.delete(scenes).where(eq(scenes.id, id));
+  }
+
+  async getShots(sceneId: string): Promise<Shot[]> {
+    return db
+      .select()
+      .from(shots)
+      .where(and(eq(shots.sceneId, sceneId), eq(shots.isActive, true)))
+      .orderBy(asc(shots.shotNumber));
+  }
+
+  async getShot(id: string): Promise<Shot | undefined> {
+    const result = await db.select().from(shots).where(eq(shots.id, id));
+    return result[0];
+  }
+
+  async createShot(insertShot: InsertShot): Promise<Shot> {
+    const result = await db
+      .insert(shots)
+      .values({
+        ...insertShot,
+        version: insertShot.version ?? 1,
+        isActive: insertShot.isActive ?? true,
+        aspectRatio: insertShot.aspectRatio || "16:9",
+      })
+      .returning();
+    return result[0];
+  }
+
+  async updateShot(id: string, updates: Partial<InsertShot>): Promise<Shot | undefined> {
+    const result = await db.update(shots).set(updates).where(eq(shots.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteShot(id: string): Promise<void> {
+    await db.delete(shots).where(eq(shots.id, id));
+  }
+
+  async getCharacters(projectId: string): Promise<Character[]> {
+    return db
+      .select()
+      .from(characters)
+      .where(eq(characters.projectId, projectId))
+      .orderBy(asc(characters.name));
+  }
+
+  async getCharacter(id: string): Promise<Character | undefined> {
+    const result = await db.select().from(characters).where(eq(characters.id, id));
+    return result[0];
+  }
+
+  async createCharacter(insertCharacter: InsertCharacter): Promise<Character> {
+    const result = await db.insert(characters).values(insertCharacter).returning();
+    return result[0];
+  }
+
+  async updateCharacter(id: string, updates: Partial<InsertCharacter>): Promise<Character | undefined> {
+    const result = await db.update(characters).set(updates).where(eq(characters.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteCharacter(id: string): Promise<void> {
+    await db.delete(characters).where(eq(characters.id, id));
+  }
+
+  async getPerformanceGuides(sceneId: string, characterId?: string): Promise<PerformanceGuide[]> {
+    if (characterId) {
+      return db
+        .select()
+        .from(performanceGuides)
+        .where(
+          and(
+            eq(performanceGuides.sceneId, sceneId),
+            eq(performanceGuides.isActive, true),
+            eq(performanceGuides.characterId, characterId)
+          )
+        )
+        .orderBy(desc(performanceGuides.version));
+    }
+    return db
+      .select()
+      .from(performanceGuides)
+      .where(and(eq(performanceGuides.sceneId, sceneId), eq(performanceGuides.isActive, true)))
+      .orderBy(desc(performanceGuides.version));
+  }
+
+  async getPerformanceGuide(id: string): Promise<PerformanceGuide | undefined> {
+    const result = await db.select().from(performanceGuides).where(eq(performanceGuides.id, id));
+    return result[0];
+  }
+
+  async createPerformanceGuide(insertGuide: InsertPerformanceGuide): Promise<PerformanceGuide> {
+    const existingGuides = await this.getPerformanceGuides(insertGuide.sceneId, insertGuide.characterId);
+    const version = existingGuides.length > 0 ? Math.max(...existingGuides.map((g) => g.version)) + 1 : 1;
+
+    for (const guide of existingGuides) {
+      if (guide.isActive) {
+        await db.update(performanceGuides).set({ isActive: false }).where(eq(performanceGuides.id, guide.id));
+      }
+    }
+
+    const result = await db
+      .insert(performanceGuides)
+      .values({
+        ...insertGuide,
+        version,
+        isActive: insertGuide.isActive ?? true,
+      })
+      .returning();
+    return result[0];
+  }
+
+  async updatePerformanceGuide(id: string, updates: Partial<InsertPerformanceGuide>): Promise<PerformanceGuide | undefined> {
+    const result = await db.update(performanceGuides).set(updates).where(eq(performanceGuides.id, id)).returning();
+    return result[0];
+  }
+
+  async getSceneAnalysis(sceneId: string): Promise<SceneAnalysis | undefined> {
+    const result = await db
+      .select()
+      .from(sceneAnalysis)
+      .where(and(eq(sceneAnalysis.sceneId, sceneId), eq(sceneAnalysis.isActive, true)));
+    return result[0];
+  }
+
+  async createSceneAnalysis(insertAnalysis: InsertSceneAnalysis): Promise<SceneAnalysis> {
+    const existing = await this.getSceneAnalysis(insertAnalysis.sceneId);
+    if (existing) {
+      await db.update(sceneAnalysis).set({ isActive: false }).where(eq(sceneAnalysis.id, existing.id));
+    }
+
+    const result = await db
+      .insert(sceneAnalysis)
+      .values({
+        ...insertAnalysis,
+        version: existing ? existing.version + 1 : 1,
+        isActive: insertAnalysis.isActive ?? true,
+      })
+      .returning();
+    return result[0];
+  }
+
+  async updateSceneAnalysis(id: string, updates: Partial<InsertSceneAnalysis>): Promise<SceneAnalysis | undefined> {
+    const result = await db.update(sceneAnalysis).set(updates).where(eq(sceneAnalysis.id, id)).returning();
+    return result[0];
+  }
+
+  async getProductionNotes(sceneId: string): Promise<ProductionNotes[]> {
+    return db
+      .select()
+      .from(productionNotes)
+      .where(and(eq(productionNotes.sceneId, sceneId), eq(productionNotes.isActive, true)));
+  }
+
+  async getProductionNote(id: string): Promise<ProductionNotes | undefined> {
+    const result = await db.select().from(productionNotes).where(eq(productionNotes.id, id));
+    return result[0];
+  }
+
+  async createProductionNotes(insertNotes: InsertProductionNotes): Promise<ProductionNotes> {
+    const result = await db
+      .insert(productionNotes)
+      .values({
+        ...insertNotes,
+        version: insertNotes.version ?? 1,
+        isActive: insertNotes.isActive ?? true,
+      })
+      .returning();
+    return result[0];
+  }
+
+  async updateProductionNotes(id: string, updates: Partial<InsertProductionNotes>): Promise<ProductionNotes | undefined> {
+    const result = await db.update(productionNotes).set(updates).where(eq(productionNotes.id, id)).returning();
+    return result[0];
+  }
+
+  async getCallSheets(projectId: string): Promise<CallSheet[]> {
+    return db
+      .select()
+      .from(callSheets)
+      .where(eq(callSheets.projectId, projectId))
+      .orderBy(desc(callSheets.createdAt));
+  }
+
+  async createCallSheet(insertCallSheet: InsertCallSheet): Promise<CallSheet> {
+    const result = await db.insert(callSheets).values(insertCallSheet).returning();
+    return result[0];
+  }
+
+  async getScriptVersions(scriptId: string): Promise<ScriptVersion[]> {
+    return db
+      .select()
+      .from(scriptVersions)
+      .where(eq(scriptVersions.scriptId, scriptId))
+      .orderBy(desc(scriptVersions.version));
+  }
+
+  async createScriptVersion(insertVersion: InsertScriptVersion): Promise<ScriptVersion> {
+    const result = await db.insert(scriptVersions).values(insertVersion).returning();
+    return result[0];
+  }
+
+  async restoreScriptVersion(scriptId: string, versionId: string): Promise<Script | undefined> {
+    const versionResult = await db.select().from(scriptVersions).where(eq(scriptVersions.id, versionId));
+    const version = versionResult[0];
+    if (!version || version.scriptId !== scriptId) return undefined;
+
+    const script = await this.getScript(scriptId);
+    if (!script) return undefined;
+
+    const currentVersion = script.version;
+    await this.createScriptVersion({
+      scriptId,
+      projectId: script.projectId,
+      content: script.content,
+      version: currentVersion,
+      changeDescription: `恢复前自动保存 v${currentVersion}`,
+    });
+
+    const result = await db
+      .update(scripts)
+      .set({
+        content: version.content,
+        version: currentVersion + 1,
+      })
+      .where(eq(scripts.id, scriptId))
+      .returning();
+    return result[0];
+  }
+
+  async getShotVersions(shotId: string): Promise<ShotVersion[]> {
+    return db
+      .select()
+      .from(shotVersions)
+      .where(eq(shotVersions.shotId, shotId))
+      .orderBy(desc(shotVersions.version));
+  }
+
+  async createShotVersion(insertVersion: InsertShotVersion): Promise<ShotVersion> {
+    const result = await db.insert(shotVersions).values(insertVersion).returning();
+    return result[0];
+  }
+
+  async restoreShotVersion(shotId: string, versionId: string): Promise<Shot | undefined> {
+    const versionResult = await db.select().from(shotVersions).where(eq(shotVersions.id, versionId));
+    const version = versionResult[0];
+    if (!version || version.shotId !== shotId) return undefined;
+
+    const shot = await this.getShot(shotId);
+    if (!shot) return undefined;
+
+    const currentVersion = shot.version;
+    await this.createShotVersion({
+      shotId,
+      sceneId: shot.sceneId,
+      description: shot.description,
+      shotType: shot.shotType,
+      cameraAngle: shot.cameraAngle,
+      cameraMovement: shot.cameraMovement,
+      duration: shot.duration,
+      atmosphere: shot.atmosphere,
+      notes: shot.notes,
+      imageUrl: shot.imageUrl,
+      imageBase64: shot.imageBase64,
+      version: currentVersion,
+      changeDescription: `恢复前自动保存 v${currentVersion}`,
+    });
+
+    const result = await db
+      .update(shots)
+      .set({
+        description: version.description,
+        shotType: version.shotType,
+        cameraAngle: version.cameraAngle,
+        cameraMovement: version.cameraMovement,
+        duration: version.duration,
+        atmosphere: version.atmosphere,
+        notes: version.notes,
+        imageUrl: version.imageUrl,
+        imageBase64: version.imageBase64,
+        version: currentVersion + 1,
+      })
+      .where(eq(shots.id, shotId))
+      .returning();
+    return result[0];
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -602,4 +1012,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

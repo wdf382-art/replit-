@@ -1078,17 +1078,37 @@ ${content.substring(0, 8000)}
 
       // 改进正则表达式以匹配更广泛的中文场次描述
       // 匹配：第X场、第X集、X场、场次X、场次:X 等 (X可以是阿拉伯数字或中文数字)
-      const sceneNumberPattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])|(?:场次[:：\s]?\s*([一二三四五六七八九十百\d]+))/gi;
-      const matches = rawText.matchAll(sceneNumberPattern);
+      // 多种场次格式解析
       const sceneNumbersFound: number[] = [];
-      for (const match of matches) {
-        const numStr = match[1] || match[2];
-        const num = chineseToNumber(numStr);
-        if (!isNaN(num) && num > 0) {
-          sceneNumbersFound.push(num);
+      
+      // 格式1: "第X场", "X场" 等
+      const chinesePattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])/gi;
+      for (const match of rawText.matchAll(chinesePattern)) {
+        const num = chineseToNumber(match[1]);
+        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+      }
+      
+      // 格式2: "场次: 1, 2, 3" 或 "场次：1、2、3" - 提取逗号/顿号分隔的数字列表
+      const listPattern = /场次[:：\s]?\s*([\d,，、\s]+)/gi;
+      for (const match of rawText.matchAll(listPattern)) {
+        const numberList = match[1];
+        // 分割数字列表
+        const numbers = numberList.split(/[,，、\s]+/).filter(s => s.trim());
+        for (const numStr of numbers) {
+          const num = parseInt(numStr.trim());
+          if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
         }
       }
+      
+      // 格式3: 独立的阿拉伯数字（如 "1-1", "2-3" 场次编号）
+      const dashPattern = /(\d+)[-.](\d+)/g;
+      for (const match of rawText.matchAll(dashPattern)) {
+        const num = parseInt(match[1]);
+        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+      }
+      
       const uniqueSceneNumbers = [...new Set(sceneNumbersFound)].sort((a, b) => a - b);
+      console.log(`[Call Sheet Parse] Extracted scene numbers: ${uniqueSceneNumbers.join(', ')} from text: "${rawText.substring(0, 100)}..."`);
 
       // 提取场次信息
       const sceneNumbers = uniqueSceneNumbers;
@@ -1101,65 +1121,162 @@ ${content.substring(0, 8000)}
       // 获取当前活动的剧本，用于关联 scriptId
       const scripts = await storage.getScripts(projectId);
       const activeScript = scripts.find(s => s.isActive);
+      console.log(`[Call Sheet] Active script found: ${activeScript ? 'Yes' : 'No'}, content length: ${activeScript?.content?.length || 0}`);
       
-      // 获取剧本中的所有场次
-      let scriptScenes: any[] = [];
-      if (activeScript) {
-        scriptScenes = await storage.getScenes(projectId);
-        // 确保这些场次是属于该剧本的
-        scriptScenes = scriptScenes.filter(s => s.scriptId === activeScript.id);
-      }
+      // 核心修复：从剧本原文中提取场次内容
+      // 解析函数：从剧本文本中提取指定场次的内容
+      const extractSceneContentFromScript = (scriptContent: string, sceneNum: number): { 
+        title: string | null; 
+        location: string | null; 
+        timeOfDay: string | null; 
+        description: string | null; 
+        dialogue: string | null; 
+        action: string | null; 
+      } => {
+        if (!scriptContent) {
+          console.log(`[Scene Extract] No script content available for scene ${sceneNum}`);
+          return { title: null, location: null, timeOfDay: null, description: null, dialogue: null, action: null };
+        }
+        
+        console.log(`[Scene Extract] Attempting to extract scene ${sceneNum} from script (${scriptContent.length} chars)`);
+        
+        // 匹配场次标题行的模式，支持多种格式：
+        // 第1场, 1-1, 1.1, 场次1 等
+        const scenePatterns = [
+          // 最常见：匹配 "第X场" 格式 (如 "第1场 医院走廊 日 内")
+          new RegExp(`(?:^|[\\n\\r])\\s*(第\\s*${sceneNum}\\s*[场集次][^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*第\\s*[一二三四五六七八九十百\\d]+\\s*[场集次]|[\\n\\r]\\s*\\d+[-.]\\d+\\s|$)`, 'i'),
+          // 匹配 "X-Y" 或 "X.Y" 格式 (如 1-1, 4-8, 4.1)
+          new RegExp(`(?:^|[\\n\\r])\\s*(${sceneNum}[-.]\\d+[^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*\\d+[-.]\\d+\\s|[\\n\\r]\\s*第[一二三四五六七八九十百\\d]+[场集]|$)`, 'i'),
+          // 匹配纯 "场次X" 格式
+          new RegExp(`(?:^|[\\n\\r])\\s*(场次\\s*${sceneNum}[^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*场次\\s*\\d+|[\\n\\r]\\s*第\\d+场|$)`, 'i'),
+        ];
+        
+        let matchedContent = '';
+        let matchedTitle = '';
+        
+        for (let i = 0; i < scenePatterns.length; i++) {
+          const pattern = scenePatterns[i];
+          const match = scriptContent.match(pattern);
+          if (match) {
+            matchedTitle = match[1]?.trim() || '';
+            matchedContent = match[2]?.trim() || '';
+            console.log(`[Scene Extract] Pattern ${i + 1} matched for scene ${sceneNum}: title="${matchedTitle.substring(0, 50)}..."`);
+            break;
+          }
+        }
+        
+        if (!matchedContent && !matchedTitle) {
+          console.log(`[Scene Extract] No match found for scene ${sceneNum}`);
+          return { title: null, location: null, timeOfDay: null, description: null, dialogue: null, action: null };
+        }
+        
+        console.log(`[Scene Extract] Found content for scene ${sceneNum}: ${matchedContent.length} chars`);
+        
+        // 解析时间和地点（通常在标题行中）
+        let location: string | null = null;
+        let timeOfDay: string | null = null;
+        
+        // 匹配地点（通常在标题中，如 "医院走廊"，"秦天家"）
+        const locationMatch = matchedTitle.match(/([^\d\s年月日夜内外]+(?:家|院|室|厅|房|街|道|楼|场|店|局|处|所|馆|园|村|镇|城|区|河边|别墅|走廊|书房|卧室|办公室)[^\s]*)/);
+        if (locationMatch) {
+          location = locationMatch[1];
+        }
+        
+        // 匹配时间（日、夜、黄昏等）
+        const timeMatch = matchedTitle.match(/(日|夜|黄昏|清晨|傍晚|午后|凌晨)/);
+        if (timeMatch) {
+          timeOfDay = timeMatch[1];
+        }
+        
+        // 分离对白和动作描述
+        const lines = matchedContent.split('\n');
+        const dialogueLines: string[] = [];
+        const actionLines: string[] = [];
+        const descriptionLines: string[] = [];
+        
+        let currentSection = 'description';
+        
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) continue;
+          
+          // 判断是对白还是动作
+          // 对白通常格式：角色名：对白内容 或 角色名（VO）：对白
+          if (/^[^\s△▲●○◆◇【】\[\]]+[:：]/.test(trimmedLine) || /\(VO\)|（VO）/.test(trimmedLine)) {
+            dialogueLines.push(trimmedLine);
+            currentSection = 'dialogue';
+          } 
+          // 动作描述通常以 △ 或 ▲ 开头
+          else if (/^[△▲]/.test(trimmedLine)) {
+            actionLines.push(trimmedLine.replace(/^[△▲]\s*/, ''));
+            currentSection = 'action';
+          }
+          // 人物行
+          else if (/^人物[:：]/.test(trimmedLine)) {
+            descriptionLines.push(trimmedLine);
+          }
+          // 其他内容归入描述
+          else {
+            if (currentSection === 'dialogue' && dialogueLines.length > 0) {
+              // 可能是对白的延续
+              dialogueLines.push(trimmedLine);
+            } else {
+              descriptionLines.push(trimmedLine);
+            }
+          }
+        }
+        
+        return {
+          title: matchedTitle || null,
+          location,
+          timeOfDay,
+          description: descriptionLines.length > 0 ? descriptionLines.join('\n') : null,
+          dialogue: dialogueLines.length > 0 ? dialogueLines.join('\n') : null,
+          action: actionLines.length > 0 ? actionLines.join('\n') : null,
+        };
+      };
 
       for (const sceneNum of sceneNumbers) {
-        // 首先尝试从现有场景中查找匹配场次（不论是否在剧本中）
+        // 首先从剧本原文提取场次内容
+        let scriptExtractedContent = { title: null as string | null, location: null as string | null, timeOfDay: null as string | null, description: null as string | null, dialogue: null as string | null, action: null as string | null };
+        if (activeScript?.content) {
+          scriptExtractedContent = extractSceneContentFromScript(activeScript.content, sceneNum);
+          console.log(`Extracted content for scene ${sceneNum}:`, scriptExtractedContent.title ? 'Found' : 'Not found');
+        }
+
+        // 查找是否已存在该场次
         let existingScene = allProjectScenes.find(s => s.sceneNumber === sceneNum);
 
         if (existingScene) {
-          console.log(`Updating scene ${sceneNum} (ID: ${existingScene.id}) to isInCallSheet: true`);
-          // 核心修复：如果现有场景缺乏内容，尝试从剧本中的同场次场景复制内容
+          console.log(`Updating scene ${sceneNum} (ID: ${existingScene.id}) with script content`);
           const sceneUpdate: any = { 
             isInCallSheet: true,
             scriptId: activeScript?.id || existingScene.scriptId 
           };
 
-          // 如果当前场景没有详情，尝试在项目中寻找有详情的同号场次
-          if (!existingScene.description && !existingScene.dialogue && !existingScene.action) {
-            const sourceScene = allProjectScenes.find(s => 
-              s.sceneNumber === sceneNum && 
-              (s.description || s.dialogue || s.action)
-            );
-            if (sourceScene) {
-              sceneUpdate.title = sourceScene.title;
-              sceneUpdate.location = sourceScene.location;
-              sceneUpdate.timeOfDay = sourceScene.timeOfDay;
-              sceneUpdate.description = sourceScene.description;
-              sceneUpdate.dialogue = sourceScene.dialogue;
-              sceneUpdate.action = sourceScene.action;
-              sceneUpdate.duration = sourceScene.duration;
-            }
-          }
+          // 从剧本中提取的内容填充到场次中
+          if (scriptExtractedContent.title) sceneUpdate.title = scriptExtractedContent.title;
+          if (scriptExtractedContent.location) sceneUpdate.location = scriptExtractedContent.location;
+          if (scriptExtractedContent.timeOfDay) sceneUpdate.timeOfDay = scriptExtractedContent.timeOfDay;
+          if (scriptExtractedContent.description) sceneUpdate.description = scriptExtractedContent.description;
+          if (scriptExtractedContent.dialogue) sceneUpdate.dialogue = scriptExtractedContent.dialogue;
+          if (scriptExtractedContent.action) sceneUpdate.action = scriptExtractedContent.action;
           
           await storage.updateScene(existingScene.id, sceneUpdate);
         } else {
-          console.log(`Creating new scene ${sceneNum} for call sheet`);
-          // 查找是否有带剧本内容的场次可以作为模板
-          const sourceScene = allProjectScenes.find(s => 
-            s.sceneNumber === sceneNum && 
-            (s.description || s.dialogue || s.action)
-          );
-
+          console.log(`Creating new scene ${sceneNum} with script content`);
           await storage.createScene({
             projectId,
             sceneNumber: sceneNum,
-            title: sourceScene?.title || `第 ${sceneNum} 场 (通告单识别)`,
-            location: sourceScene?.location || null,
-            timeOfDay: sourceScene?.timeOfDay || null,
-            description: sourceScene?.description || null,
-            dialogue: sourceScene?.dialogue || null,
-            action: sourceScene?.action || null,
-            duration: sourceScene?.duration || null,
+            title: scriptExtractedContent.title || `第 ${sceneNum} 场`,
+            location: scriptExtractedContent.location,
+            timeOfDay: scriptExtractedContent.timeOfDay,
+            description: scriptExtractedContent.description,
+            dialogue: scriptExtractedContent.dialogue,
+            action: scriptExtractedContent.action,
+            duration: null,
             isInCallSheet: true,
-            scriptId: activeScript?.id || sourceScene?.scriptId || null,
+            scriptId: activeScript?.id || null,
           });
         }
       }
