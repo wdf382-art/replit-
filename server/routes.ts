@@ -1053,15 +1053,15 @@ ${content.substring(0, 8000)}
       // 匹配：第X场、第X集、X场、场次X、场次:X 等 (X可以是阿拉伯数字或中文数字)
       const sceneNumberPattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])|(?:场次[:：\s]?\s*([一二三四五六七八九十百\d]+))/gi;
       const matches = rawText.matchAll(sceneNumberPattern);
-      const sceneNumbers: number[] = [];
+      const sceneNumbersFound: number[] = [];
       for (const match of matches) {
         const numStr = match[1] || match[2];
         const num = chineseToNumber(numStr);
         if (!isNaN(num) && num > 0) {
-          sceneNumbers.push(num);
+          sceneNumbersFound.push(num);
         }
       }
-      const uniqueSceneNumbers = [...new Set(sceneNumbers)].sort((a, b) => a - b);
+      const uniqueSceneNumbers = [...new Set(sceneNumbersFound)].sort((a, b) => a - b);
 
       // 提取场次信息
       const sceneNumbers = uniqueSceneNumbers;
