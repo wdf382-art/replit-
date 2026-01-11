@@ -232,6 +232,12 @@ export default function StoryboardPage() {
     enabled: !!currentProject?.id,
   });
 
+  const filteredScenes = scenes?.filter((scene) => {
+    if (!selectedCallSheetId) return true;
+    const callSheet = callSheets?.find((cs) => cs.id === selectedCallSheetId);
+    return callSheet?.sceneNumbers?.includes(scene.sceneNumber);
+  });
+
   const handleCallSheetUpload = async () => {
     if (!currentProject?.id || !callSheetTitle.trim() || !callSheetText.trim()) {
       toast({

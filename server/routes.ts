@@ -468,6 +468,19 @@ ${content.substring(0, 8000)}
     }
   });
 
+  app.patch("/api/scenes/:id", async (req, res) => {
+    try {
+      const scene = await storage.updateScene(req.params.id, req.body);
+      if (!scene) {
+        return res.status(404).json({ error: "Scene not found" });
+      }
+      res.json(scene);
+    } catch (error) {
+      console.error("Error updating scene:", error);
+      res.status(500).json({ error: "Failed to update scene" });
+    }
+  });
+
   app.get("/api/shots", async (req, res) => {
     try {
       const sceneId = req.query.sceneId as string;
