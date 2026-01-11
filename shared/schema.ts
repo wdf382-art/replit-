@@ -132,6 +132,29 @@ export const insertSceneSchema = createInsertSchema(scenes).omit({
 export type InsertScene = z.infer<typeof insertSceneSchema>;
 export type Scene = typeof scenes.$inferSelect;
 
+// Call sheets table
+export const callSheets = pgTable("call_sheets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  rawText: text("raw_text"),
+  sceneNumbers: jsonb("scene_numbers").$type<number[]>(),
+  fileMetadata: jsonb("file_metadata").$type<{fileName?: string; fileType?: string; uploadedAt?: string}>(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertCallSheetSchema = createInsertSchema(callSheets).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCallSheet = z.infer<typeof insertCallSheetSchema>;
+export type CallSheet = typeof callSheets.$inferSelect;
+
+// Aspect ratios for storyboard images
+export const aspectRatios = ["16:9", "2.35:1", "4:3", "1:1", "9:16", "1.85:1", "custom"] as const;
+export type AspectRatio = typeof aspectRatios[number];
+
 // Shots/Storyboards table
 export const shots = pgTable("shots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -143,7 +166,11 @@ export const shots = pgTable("shots", {
   cameraMovement: text("camera_movement").$type<CameraMovement>(),
   duration: integer("duration"), // in seconds
   directorStyle: text("director_style").$type<DirectorStyle>(),
+  customDirectorStyle: text("custom_director_style"),
   visualStyle: text("visual_style").$type<VisualStyle>(),
+  customVisualStyle: text("custom_visual_style"),
+  aspectRatio: text("aspect_ratio").$type<AspectRatio>().default("16:9"),
+  customAspectRatio: text("custom_aspect_ratio"),
   imageUrl: text("image_url"),
   imageBase64: text("image_base64"),
   atmosphere: text("atmosphere"),
