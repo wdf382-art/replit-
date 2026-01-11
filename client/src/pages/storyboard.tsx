@@ -102,8 +102,12 @@ export default function StoryboardPage() {
   const generateShotsMutation = useMutation({
     mutationFn: async (data: { 
       sceneId: string; 
-      directorStyle: DirectorStyle; 
-      visualStyle: VisualStyle;
+      directorStyle: string;
+      customDirectorStyle?: string;
+      visualStyle: string;
+      customVisualStyle?: string;
+      aspectRatio: string;
+      customAspectRatio?: string;
     }) => {
       return apiRequest("POST", "/api/shots/generate", data);
     },
@@ -158,6 +162,33 @@ export default function StoryboardPage() {
       return;
     }
 
+    if (selectedDirectorStyle === "custom" && !customDirectorStyle.trim()) {
+      toast({
+        title: "请输入自定义导演风格",
+        description: "选择自定义风格时需要填写具体的风格描述",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedVisualStyle === "custom" && !customVisualStyle.trim()) {
+      toast({
+        title: "请输入自定义画面风格",
+        description: "选择自定义风格时需要填写具体的风格描述",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedAspectRatio === "custom" && !customAspectRatio.trim()) {
+      toast({
+        title: "请输入自定义画幅比例",
+        description: "选择自定义比例时需要填写具体的比例值",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setGenerationProgress(0);
 
@@ -174,11 +205,15 @@ export default function StoryboardPage() {
     generateShotsMutation.mutate({
       sceneId: selectedScene.id,
       directorStyle: selectedDirectorStyle,
+      customDirectorStyle: selectedDirectorStyle === "custom" ? customDirectorStyle : undefined,
       visualStyle: selectedVisualStyle,
+      customVisualStyle: selectedVisualStyle === "custom" ? customVisualStyle : undefined,
+      aspectRatio: selectedAspectRatio,
+      customAspectRatio: selectedAspectRatio === "custom" ? customAspectRatio : undefined,
     });
   };
 
-  const currentDirector = directorStyleInfo[selectedDirectorStyle];
+  const currentDirector = selectedDirectorStyle !== "custom" ? directorStyleInfo[selectedDirectorStyle as DirectorStyle] : null;
 
   return (
     <div className="flex-1 flex overflow-hidden">

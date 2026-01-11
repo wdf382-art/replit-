@@ -38,7 +38,8 @@ export const directorStyles = [
   "park_chan_wook",
   "hirokazu_koreeda",
   "hou_hsiao_hsien",
-  "tsai_ming_liang"
+  "tsai_ming_liang",
+  "custom"
 ] as const;
 export type DirectorStyle = typeof directorStyles[number];
 
@@ -51,7 +52,8 @@ export const visualStyles = [
   "black_white",
   "dreamy_soft",
   "documentary",
-  "animation_storyboard"
+  "animation_storyboard",
+  "custom"
 ] as const;
 export type VisualStyle = typeof visualStyles[number];
 
@@ -293,6 +295,7 @@ export const directorStyleInfo: Record<DirectorStyle, { name: string; nameCN: st
   hirokazu_koreeda: { name: "Hirokazu Koreeda", nameCN: "是枝裕和", traits: "自然光、生活化、细腻情感", works: "《小偷家族》《步履不停》" },
   hou_hsiao_hsien: { name: "Hou Hsiao-hsien", nameCN: "侯孝贤", traits: "固定长镜头、空间感、留白", works: "《悲情城市》《刺客聂隐娘》" },
   tsai_ming_liang: { name: "Tsai Ming-liang", nameCN: "蔡明亮", traits: "极简对白、凝视镜头、都市疏离", works: "《爱情万岁》《郊游》" },
+  custom: { name: "Custom", nameCN: "自定义", traits: "用户自定义风格", works: "用户指定" },
 };
 
 // Visual style info
@@ -305,6 +308,7 @@ export const visualStyleInfo: Record<VisualStyle, { name: string; nameCN: string
   dreamy_soft: { name: "Dreamy Soft", nameCN: "梦幻柔光" },
   documentary: { name: "Documentary", nameCN: "纪录片风格" },
   animation_storyboard: { name: "Animation Storyboard", nameCN: "动画分镜风格" },
+  custom: { name: "Custom", nameCN: "自定义" },
 };
 
 // Project type info

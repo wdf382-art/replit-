@@ -38,6 +38,7 @@ import {
   cameraMovementInfo,
   type DirectorStyle,
   type VisualStyle,
+  type AspectRatio,
   type ProjectType,
 } from "@shared/schema";
 
@@ -467,26 +468,64 @@ ${content.substring(0, 8000)}
     }
   });
 
+  const GenerateShotsSchema = z.object({
+    sceneId: z.string().min(1),
+    directorStyle: z.string(),
+    customDirectorStyle: z.string().optional(),
+    visualStyle: z.string(),
+    customVisualStyle: z.string().optional(),
+    aspectRatio: z.string().default("16:9"),
+    customAspectRatio: z.string().optional(),
+  }).refine(data => {
+    if (data.directorStyle === "custom" && !data.customDirectorStyle?.trim()) {
+      return false;
+    }
+    return true;
+  }, { message: "Custom director style description is required when using custom style" })
+  .refine(data => {
+    if (data.visualStyle === "custom" && !data.customVisualStyle?.trim()) {
+      return false;
+    }
+    return true;
+  }, { message: "Custom visual style description is required when using custom style" })
+  .refine(data => {
+    if (data.aspectRatio === "custom" && !data.customAspectRatio?.trim()) {
+      return false;
+    }
+    return true;
+  }, { message: "Custom aspect ratio is required when using custom ratio" });
+
   app.post("/api/shots/generate", async (req, res) => {
     try {
-      const { sceneId, directorStyle, visualStyle } = req.body as {
-        sceneId: string;
-        directorStyle: DirectorStyle;
-        visualStyle: VisualStyle;
-      };
+      const parsed = GenerateShotsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      
+      const { sceneId, directorStyle, customDirectorStyle, visualStyle, customVisualStyle, aspectRatio, customAspectRatio } = parsed.data;
 
       const scene = await storage.getScene(sceneId);
       if (!scene) {
         return res.status(404).json({ error: "Scene not found" });
       }
 
-      const director = directorStyleInfo[directorStyle];
-      const visual = visualStyleInfo[visualStyle];
+      const isCustomDirector = directorStyle === "custom";
+      const isCustomVisual = visualStyle === "custom";
+      const isCustomAspect = aspectRatio === "custom";
+      
+      const director = !isCustomDirector ? directorStyleInfo[directorStyle as DirectorStyle] : null;
+      const visual = !isCustomVisual ? visualStyleInfo[visualStyle as VisualStyle] : null;
+      const finalAspectRatio = isCustomAspect ? customAspectRatio : aspectRatio;
 
-      const prompt = `你是一位专业的电影分镜师，精通${director.nameCN}（${director.name}）的导演风格。
+      const directorDescription = isCustomDirector 
+        ? `自定义导演风格：${customDirectorStyle}`
+        : `${director!.nameCN}（${director!.name}）的导演风格。\n${director!.nameCN}的风格特点：${director!.traits}\n代表作品：${director!.works}`;
+      
+      const visualDescription = isCustomVisual
+        ? `自定义画面风格：${customVisualStyle}`
+        : `${visual!.nameCN}`;
 
-${director.nameCN}的风格特点：${director.traits}
-代表作品：${director.works}
+      const prompt = `你是一位专业的电影分镜师，精通${directorDescription}
 
 请为以下场次设计分镜头：
 场次${scene.sceneNumber}：${scene.title}
@@ -496,9 +535,10 @@ ${director.nameCN}的风格特点：${director.traits}
 动作：${scene.action || ""}
 对白：${scene.dialogue || ""}
 
-画面风格要求：${visual.nameCN}
+画面风格要求：${visualDescription}
+画幅比例：${finalAspectRatio || "16:9"}
 
-请设计5-8个镜头，体现${director.nameCN}的导演风格特点。
+请设计5-8个镜头，体现导演风格特点。
 
 返回JSON格式：
 {
@@ -536,8 +576,12 @@ ${director.nameCN}的风格特点：${director.traits}
           cameraAngle: shot.cameraAngle,
           cameraMovement: shot.cameraMovement,
           duration: shot.duration,
-          directorStyle,
-          visualStyle,
+          directorStyle: isCustomDirector ? "custom" : directorStyle as DirectorStyle,
+          customDirectorStyle: isCustomDirector ? customDirectorStyle : undefined,
+          visualStyle: isCustomVisual ? "custom" : visualStyle as VisualStyle,
+          customVisualStyle: isCustomVisual ? customVisualStyle : undefined,
+          aspectRatio: isCustomAspect ? "custom" : aspectRatio as AspectRatio,
+          customAspectRatio: isCustomAspect ? customAspectRatio : undefined,
           atmosphere: shot.atmosphere,
           notes: shot.notes,
         });
