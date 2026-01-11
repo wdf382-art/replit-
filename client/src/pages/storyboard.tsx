@@ -260,11 +260,12 @@ export default function StoryboardPage() {
       // Extract scene numbers from response and create scenes if they don't exist
       if (response.sceneNumbers && response.sceneNumbers.length > 0) {
         console.log("Auto-creating scenes from call sheet:", response.sceneNumbers);
+        // Map the title to the original project title if possible, or use a better fallback
         await Promise.all(response.sceneNumbers.map((num: number) => 
           apiRequest("POST", "/api/scenes", {
             projectId: currentProject.id,
             sceneNumber: num,
-            title: `场次 ${num}`,
+            title: `第 ${num} 场 (通告单识别)`,
             isInCallSheet: true
           }).catch(err => console.error(`Failed to create scene ${num}:`, err))
         ));
@@ -423,7 +424,7 @@ export default function StoryboardPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm">场次 {scene.sceneNumber}</span>
                     {scene.isInCallSheet && (
-                      <Badge variant="default" className="text-xs bg-red-500 text-white animate-pulse">待处理</Badge>
+                      <Badge variant="default" className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm transition-all">识别中</Badge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
