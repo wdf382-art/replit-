@@ -1013,5 +1013,105 @@ ${content.substring(0, 8000)}
     }
   });
 
+  app.get("/api/scripts/:id/versions", async (req, res) => {
+    try {
+      const versions = await storage.getScriptVersions(req.params.id);
+      res.json(versions);
+    } catch (error) {
+      console.error("Error fetching script versions:", error);
+      res.status(500).json({ error: "无法获取剧本版本历史" });
+    }
+  });
+
+  app.post("/api/scripts/:id/versions", async (req, res) => {
+    try {
+      const script = await storage.getScript(req.params.id);
+      if (!script) {
+        return res.status(404).json({ error: "剧本不存在" });
+      }
+
+      const version = await storage.createScriptVersion({
+        scriptId: script.id,
+        projectId: script.projectId,
+        content: script.content,
+        version: script.version,
+        changeDescription: req.body.changeDescription,
+        changedBy: req.body.changedBy,
+      });
+
+      res.status(201).json(version);
+    } catch (error) {
+      console.error("Error creating script version:", error);
+      res.status(500).json({ error: "无法保存剧本版本" });
+    }
+  });
+
+  app.post("/api/scripts/:id/versions/:versionId/restore", async (req, res) => {
+    try {
+      const restored = await storage.restoreScriptVersion(req.params.id, req.params.versionId);
+      if (!restored) {
+        return res.status(404).json({ error: "找不到对应版本或剧本" });
+      }
+      res.json(restored);
+    } catch (error) {
+      console.error("Error restoring script version:", error);
+      res.status(500).json({ error: "无法恢复剧本版本" });
+    }
+  });
+
+  app.get("/api/shots/:id/versions", async (req, res) => {
+    try {
+      const versions = await storage.getShotVersions(req.params.id);
+      res.json(versions);
+    } catch (error) {
+      console.error("Error fetching shot versions:", error);
+      res.status(500).json({ error: "无法获取分镜版本历史" });
+    }
+  });
+
+  app.post("/api/shots/:id/versions", async (req, res) => {
+    try {
+      const shot = await storage.getShot(req.params.id);
+      if (!shot) {
+        return res.status(404).json({ error: "分镜不存在" });
+      }
+
+      const version = await storage.createShotVersion({
+        shotId: shot.id,
+        sceneId: shot.sceneId,
+        description: shot.description,
+        shotType: shot.shotType,
+        cameraAngle: shot.cameraAngle,
+        cameraMovement: shot.cameraMovement,
+        duration: shot.duration,
+        atmosphere: shot.atmosphere,
+        notes: shot.notes,
+        imageUrl: shot.imageUrl,
+        imageBase64: shot.imageBase64,
+        version: shot.version,
+        changeDescription: req.body.changeDescription,
+        changedBy: req.body.changedBy,
+      });
+
+      res.status(201).json(version);
+    } catch (error) {
+      console.error("Error creating shot version:", error);
+      res.status(500).json({ error: "无法保存分镜版本" });
+    }
+  });
+
+  app.post("/api/shots/:id/versions/:versionId/restore", async (req, res) => {
+    try {
+      const restored = await storage.restoreShotVersion(req.params.id, req.params.versionId);
+      if (!restored) {
+        return res.status(404).json({ error: "找不到对应版本或分镜" });
+      }
+      res.json(restored);
+    } catch (error) {
+      console.error("Error restoring shot version:", error);
+      res.status(500).json({ error: "无法恢复分镜版本" });
+    }
+  });
+
   return httpServer;
 }
