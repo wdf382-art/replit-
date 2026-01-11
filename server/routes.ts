@@ -955,16 +955,42 @@ ${content.substring(0, 8000)}
         rawText = pdfData.text;
       }
 
+      // 辅助函数：将中文数字转换为阿拉伯数字
+      const chineseToNumber = (str: string): number => {
+        const chineseNums: Record<string, number> = {
+          '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+          '零': 0, '壹': 1, '贰': 2, '叁': 3, '肆': 4, '伍': 5, '陆': 6, '柒': 7, '捌': 8, '玖': 9, '拾': 10
+        };
+        
+        if (/^\d+$/.test(str)) return parseInt(str);
+        
+        let result = 0;
+        let temp = 0;
+        for (let i = 0; i < str.length; i++) {
+          const char = str[i];
+          const val = chineseNums[char];
+          if (val === undefined) continue;
+          
+          if (val === 10) {
+            if (temp === 0) result += 10;
+            else result += temp * 10;
+            temp = 0;
+          } else {
+            temp = val;
+          }
+        }
+        return result + temp;
+      };
+
       // 改进正则表达式以匹配更广泛的中文场次描述
-      // 匹配：第X场、第X集、X场、场次X、场次:X 等
-      const sceneNumberPattern = /(?:第?\s*(\d+)\s*[场集次])|(?:场次[:：\s]?\s*(\d+))/gi;
+      // 匹配：第X场、第X集、X场、场次X、场次:X 等 (X可以是阿拉伯数字或中文数字)
+      const sceneNumberPattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])|(?:场次[:：\s]?\s*([一二三四五六七八九十百\d]+))/gi;
       const matches = rawText.matchAll(sceneNumberPattern);
       const sceneNumbers: number[] = [];
       for (const match of matches) {
-        // match[1] 是第一种格式捕获的数字，match[2] 是第二种格式捕获的数字
         const numStr = match[1] || match[2];
-        const num = parseInt(numStr);
-        if (!isNaN(num)) {
+        const num = chineseToNumber(numStr);
+        if (!isNaN(num) && num > 0) {
           sceneNumbers.push(num);
         }
       }
@@ -996,16 +1022,42 @@ ${content.substring(0, 8000)}
         return res.status(400).json({ error: "projectId, title和rawText是必需的" });
       }
 
+      // 辅助函数：将中文数字转换为阿拉伯数字
+      const chineseToNumber = (str: string): number => {
+        const chineseNums: Record<string, number> = {
+          '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+          '零': 0, '壹': 1, '贰': 2, '叁': 3, '肆': 4, '伍': 5, '陆': 6, '柒': 7, '捌': 8, '玖': 9, '拾': 10
+        };
+        
+        if (/^\d+$/.test(str)) return parseInt(str);
+        
+        let result = 0;
+        let temp = 0;
+        for (let i = 0; i < str.length; i++) {
+          const char = str[i];
+          const val = chineseNums[char];
+          if (val === undefined) continue;
+          
+          if (val === 10) {
+            if (temp === 0) result += 10;
+            else result += temp * 10;
+            temp = 0;
+          } else {
+            temp = val;
+          }
+        }
+        return result + temp;
+      };
+
       // 改进正则表达式以匹配更广泛的中文场次描述
-      // 匹配：第X场、第X集、X场、场次X、场次:X 等
-      const sceneNumberPattern = /(?:第?\s*(\d+)\s*[场集次])|(?:场次[:：\s]?\s*(\d+))/gi;
+      // 匹配：第X场、第X集、X场、场次X、场次:X 等 (X可以是阿拉伯数字或中文数字)
+      const sceneNumberPattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])|(?:场次[:：\s]?\s*([一二三四五六七八九十百\d]+))/gi;
       const matches = rawText.matchAll(sceneNumberPattern);
       const sceneNumbers: number[] = [];
       for (const match of matches) {
-        // match[1] 是第一种格式捕获的数字，match[2] 是第二种格式捕获的数字
         const numStr = match[1] || match[2];
-        const num = parseInt(numStr);
-        if (!isNaN(num)) {
+        const num = chineseToNumber(numStr);
+        if (!isNaN(num) && num > 0) {
           sceneNumbers.push(num);
         }
       }
