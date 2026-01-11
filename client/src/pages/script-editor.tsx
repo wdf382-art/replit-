@@ -13,6 +13,8 @@ import {
   Clock,
   Check,
   AlertCircle,
+  Upload,
+  File,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
@@ -47,6 +51,9 @@ export default function ScriptEditorPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [activeTab, setActiveTab] = useState("idea");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [extractScenes, setExtractScenes] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
 
   const projectId = new URLSearchParams(location.split("?")[1] || "").get("project");
 
@@ -126,6 +133,57 @@ export default function ScriptEditorPage() {
       });
     },
   });
+
+  const handleUpload = async () => {
+    if (!uploadFile) {
+      toast({
+        title: "请选择文件",
+        description: "请先选择要上传的剧本文件",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", uploadFile);
+    if (currentProject?.id) {
+      formData.append("projectId", currentProject.id);
+    }
+    formData.append("extractScenes", extractScenes.toString());
+
+    try {
+      const response = await fetch("/api/scripts/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const result = await response.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/scripts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/scenes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+
+      toast({
+        title: "上传成功",
+        description: `剧本 "${result.fileName}" 已成功上传`,
+      });
+
+      setUploadFile(null);
+      setActiveTab("script");
+    } catch (error) {
+      toast({
+        title: "上传失败",
+        description: "请检查文件格式后重试",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleGenerate = () => {
     if (!ideaInput.trim()) {
@@ -218,6 +276,10 @@ export default function ScriptEditorPage() {
                   <TabsTrigger value="idea" data-testid="tab-idea">
                     <Lightbulb className="mr-2 h-4 w-4" />
                     创意输入
+                  </TabsTrigger>
+                  <TabsTrigger value="upload" data-testid="tab-upload">
+                    <Upload className="mr-2 h-4 w-4" />
+                    上传剧本
                   </TabsTrigger>
                   <TabsTrigger value="script" data-testid="tab-script">
                     <FileText className="mr-2 h-4 w-4" />
@@ -315,6 +377,114 @@ export default function ScriptEditorPage() {
                           <>
                             <Wand2 className="mr-2 h-4 w-4" />
                             生成剧本
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="upload" className="flex-1 overflow-auto p-4 mt-0">
+                <div className="max-w-3xl mx-auto space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Upload className="h-5 w-5 text-primary" />
+                        上传剧本文件
+                      </CardTitle>
+                      <CardDescription>
+                        上传已有的剧本文件，支持 .txt、.md、.fountain 格式
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div
+                        className="border-2 border-dashed rounded-lg p-8 text-center hover-elevate cursor-pointer transition-colors"
+                        onClick={() => document.getElementById("file-upload")?.click()}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const files = e.dataTransfer.files;
+                          if (files.length > 0) {
+                            setUploadFile(files[0]);
+                          }
+                        }}
+                        data-testid="dropzone-upload"
+                      >
+                        <input
+                          id="file-upload"
+                          type="file"
+                          accept=".txt,.md,.fountain"
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = e.target.files;
+                            if (files && files.length > 0) {
+                              setUploadFile(files[0]);
+                            }
+                          }}
+                          data-testid="input-file-upload"
+                        />
+                        {uploadFile ? (
+                          <div className="space-y-2">
+                            <File className="h-12 w-12 mx-auto text-primary" />
+                            <p className="font-medium">{uploadFile.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {(uploadFile.size / 1024).toFixed(1)} KB
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setUploadFile(null);
+                              }}
+                              data-testid="button-clear-file"
+                            >
+                              清除选择
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
+                            <p className="font-medium">点击选择或拖拽文件到此处</p>
+                            <p className="text-sm text-muted-foreground">
+                              支持 .txt、.md、.fountain 格式，最大 5MB
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="extract-scenes"
+                          checked={extractScenes}
+                          onCheckedChange={(checked) => setExtractScenes(checked === true)}
+                          data-testid="checkbox-extract-scenes"
+                        />
+                        <Label htmlFor="extract-scenes" className="cursor-pointer">
+                          自动提取场次和角色信息（使用AI分析）
+                        </Label>
+                      </div>
+
+                      <Button
+                        onClick={handleUpload}
+                        disabled={!uploadFile || isUploading}
+                        className="w-full"
+                        data-testid="button-upload-script"
+                      >
+                        {isUploading ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            上传中...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-4 w-4" />
+                            上传剧本
                           </>
                         )}
                       </Button>

@@ -1,8 +1,24 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
+import multer from "multer";
 import { storage } from "./storage";
 import { openai } from "./replit_integrations/image/client";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["text/plain", "text/markdown", "application/octet-stream"];
+    const allowedExts = [".txt", ".md", ".fountain"];
+    const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf("."));
+    if (allowedTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error("不支持的文件格式。请上传 .txt, .md 或 .fountain 格式的剧本文件"));
+    }
+  },
+});
 import {
   insertProjectSchema,
   insertScriptSchema,
@@ -303,6 +319,108 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error generating script:", error);
       res.status(500).json({ error: "Failed to generate script" });
+    }
+  });
+
+  app.post("/api/scripts/upload", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "请上传剧本文件" });
+      }
+
+      const { projectId, extractScenes } = req.body as {
+        projectId?: string;
+        extractScenes?: string;
+      };
+
+      const content = req.file.buffer.toString("utf-8");
+      const fileName = req.file.originalname.replace(/\.[^/.]+$/, "");
+
+      let actualProjectId = projectId;
+      if (!actualProjectId) {
+        const project = await storage.createProject({
+          title: fileName || "上传的剧本",
+          type: "movie",
+          description: `通过文件上传: ${req.file.originalname}`,
+          targetDuration: 90 * 60,
+        });
+        actualProjectId = project.id;
+      }
+
+      const script = await storage.createScript({
+        projectId: actualProjectId,
+        content,
+        isActive: true,
+      });
+
+      if (extractScenes === "true") {
+        try {
+          const extractPrompt = `你是一位专业的编剧助理。请分析以下剧本内容，提取所有场次和角色信息。
+
+剧本内容：
+${content.substring(0, 8000)}
+
+请以JSON格式返回：
+{
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "title": "场次标题",
+      "location": "地点",
+      "timeOfDay": "日/夜",
+      "description": "场景描述",
+      "dialogue": "主要对白",
+      "action": "动作描写"
+    }
+  ],
+  "characters": [
+    {
+      "name": "角色名",
+      "description": "角色描述"
+    }
+  ]
+}`;
+
+          const response = await openai.chat.completions.create({
+            model: "gpt-5",
+            messages: [{ role: "user", content: extractPrompt }],
+            response_format: { type: "json_object" },
+            max_completion_tokens: 4096,
+          });
+
+          const extractedContent = response.choices[0]?.message?.content || "{}";
+          const extracted = safeParseJSON(extractedContent, ScriptGenerationSchema, "script");
+
+          for (const scene of extracted.scenes) {
+            await storage.createScene({
+              projectId: actualProjectId,
+              scriptId: script.id,
+              sceneNumber: scene.sceneNumber,
+              title: scene.title,
+              location: scene.location,
+              timeOfDay: scene.timeOfDay,
+              description: scene.description,
+              dialogue: scene.dialogue,
+              action: scene.action,
+            });
+          }
+
+          for (const character of extracted.characters) {
+            await storage.createCharacter({
+              projectId: actualProjectId,
+              name: character.name,
+              description: character.description,
+            });
+          }
+        } catch (extractError) {
+          console.error("Scene extraction error:", extractError);
+        }
+      }
+
+      res.json({ script, projectId: actualProjectId, fileName: req.file.originalname });
+    } catch (error) {
+      console.error("Error uploading script:", error);
+      res.status(500).json({ error: "上传失败，请重试" });
     }
   });
 
