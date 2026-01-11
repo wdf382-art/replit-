@@ -1,0 +1,608 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import {
+  Image,
+  Wand2,
+  RefreshCw,
+  Grid3X3,
+  List,
+  Download,
+  Settings2,
+  ChevronDown,
+  Plus,
+  Film,
+  Camera,
+  Move,
+  Eye,
+  Sparkles,
+} from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useAppStore } from "@/lib/store";
+import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement } from "@shared/schema";
+import {
+  directorStyles,
+  directorStyleInfo,
+  visualStyles,
+  visualStyleInfo,
+  shotTypes,
+  shotTypeInfo,
+  cameraAngles,
+  cameraAngleInfo,
+  cameraMovements,
+  cameraMovementInfo,
+} from "@shared/schema";
+
+export default function StoryboardPage() {
+  const { toast } = useToast();
+  const { currentProject, setCurrentProject } = useAppStore();
+  
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [selectedDirectorStyle, setSelectedDirectorStyle] = useState<DirectorStyle>("christopher_nolan");
+  const [selectedVisualStyle, setSelectedVisualStyle] = useState<VisualStyle>("cinematic");
+  const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [editingShotId, setEditingShotId] = useState<string | null>(null);
+  const [shotEdits, setShotEdits] = useState<Partial<Shot>>({});
+
+  const { data: projects } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
+
+  const { data: scenes } = useQuery<Scene[]>({
+    queryKey: ["/api/scenes", currentProject?.id],
+    enabled: !!currentProject?.id,
+  });
+
+  const { data: shots, isLoading: shotsLoading } = useQuery<Shot[]>({
+    queryKey: ["/api/shots", selectedScene?.id],
+    enabled: !!selectedScene?.id,
+  });
+
+  useEffect(() => {
+    if (scenes && scenes.length > 0 && !selectedScene) {
+      setSelectedScene(scenes[0]);
+    }
+  }, [scenes, selectedScene]);
+
+  const generateShotsMutation = useMutation({
+    mutationFn: async (data: { 
+      sceneId: string; 
+      directorStyle: DirectorStyle; 
+      visualStyle: VisualStyle;
+    }) => {
+      return apiRequest("POST", "/api/shots/generate", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+      setIsGenerating(false);
+      setGenerationProgress(100);
+      toast({
+        title: "分镜生成完成",
+        description: "AI已为您生成分镜，点击可编辑调整",
+      });
+    },
+    onError: () => {
+      setIsGenerating(false);
+      toast({
+        title: "生成失败",
+        description: "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateShotMutation = useMutation({
+    mutationFn: async (data: { id: string; updates: Partial<Shot> }) => {
+      return apiRequest("PATCH", `/api/shots/${data.id}`, data.updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+      setEditingShotId(null);
+      setShotEdits({});
+      toast({
+        title: "更新成功",
+        description: "分镜已更新",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "更新失败",
+        description: "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleGenerate = () => {
+    if (!selectedScene) {
+      toast({
+        title: "请选择场次",
+        description: "需要选择一个场次来生成分镜",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationProgress(0);
+
+    const progressInterval = setInterval(() => {
+      setGenerationProgress((prev) => {
+        if (prev >= 90) {
+          clearInterval(progressInterval);
+          return prev;
+        }
+        return prev + 10;
+      });
+    }, 600);
+
+    generateShotsMutation.mutate({
+      sceneId: selectedScene.id,
+      directorStyle: selectedDirectorStyle,
+      visualStyle: selectedVisualStyle,
+    });
+  };
+
+  const currentDirector = directorStyleInfo[selectedDirectorStyle];
+
+  return (
+    <div className="flex-1 flex overflow-hidden">
+      <div className="w-72 border-r overflow-hidden flex flex-col">
+        <div className="p-4 border-b">
+          <h2 className="font-semibold">场次列表</h2>
+          <p className="text-xs text-muted-foreground mt-1">选择要生成分镜的场次</p>
+        </div>
+        
+        <div className="p-4 border-b">
+          <Select value={currentProject?.id || ""} onValueChange={(id) => {
+            const project = projects?.find((p) => p.id === id);
+            if (project) {
+              setCurrentProject(project);
+              setSelectedScene(null);
+            }
+          }}>
+            <SelectTrigger data-testid="select-project-storyboard">
+              <SelectValue placeholder="选择项目" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects?.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <ScrollArea className="flex-1">
+          <div className="p-4 space-y-2">
+            {scenes && scenes.length > 0 ? (
+              scenes.map((scene) => (
+                <div
+                  key={scene.id}
+                  onClick={() => setSelectedScene(scene)}
+                  className={`p-3 border rounded-md cursor-pointer transition-colors ${
+                    selectedScene?.id === scene.id
+                      ? "border-primary bg-primary/5"
+                      : "hover-elevate"
+                  }`}
+                  data-testid={`scene-item-${scene.id}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm">场次 {scene.sceneNumber}</span>
+                    {scene.isInCallSheet && (
+                      <Badge variant="secondary" className="text-xs">通告</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                    {scene.title}
+                  </p>
+                  {scene.location && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {scene.location} {scene.timeOfDay && `- ${scene.timeOfDay}`}
+                    </p>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <Film className="h-10 w-10 mx-auto text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground mt-3">
+                  {currentProject ? "暂无场次，请先在剧本编辑器中生成剧本" : "请先选择项目"}
+                </p>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between gap-4 p-4 border-b flex-wrap">
+          <div className="flex items-center gap-3">
+            <Image className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <h1 className="text-lg font-semibold" data-testid="text-storyboard-title">智能分镜</h1>
+              {selectedScene && (
+                <p className="text-sm text-muted-foreground">场次 {selectedScene.sceneNumber}: {selectedScene.title}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex border rounded-md">
+              <Button
+                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                size="icon"
+                onClick={() => setViewMode("grid")}
+                data-testid="button-view-grid"
+              >
+                <Grid3X3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="icon"
+                onClick={() => setViewMode("list")}
+                data-testid="button-view-list"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+            <Button variant="outline" data-testid="button-export-storyboard">
+              <Download className="mr-2 h-4 w-4" />
+              导出
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-4 border-b bg-muted/30">
+          <Collapsible defaultOpen>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between" data-testid="button-style-settings">
+                <span className="flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" />
+                  风格设置
+                </span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">导演风格</label>
+                  <Select value={selectedDirectorStyle} onValueChange={(v) => setSelectedDirectorStyle(v as DirectorStyle)}>
+                    <SelectTrigger data-testid="select-director-style">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {directorStyles.map((style) => (
+                        <SelectItem key={style} value={style}>
+                          {directorStyleInfo[style].nameCN} ({directorStyleInfo[style].name})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {currentDirector && (
+                    <p className="text-xs text-muted-foreground">
+                      {currentDirector.traits}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">画面风格</label>
+                  <Select value={selectedVisualStyle} onValueChange={(v) => setSelectedVisualStyle(v as VisualStyle)}>
+                    <SelectTrigger data-testid="select-visual-style">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {visualStyles.map((style) => (
+                        <SelectItem key={style} value={style}>
+                          {visualStyleInfo[style].nameCN}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !selectedScene}
+                    className="w-full"
+                    data-testid="button-generate-storyboard"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="mr-2 h-4 w-4" />
+                        生成分镜
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {isGenerating && (
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+                      AI正在生成 {currentDirector?.nameCN} 风格分镜...
+                    </span>
+                    <span>{generationProgress}%</span>
+                  </div>
+                  <Progress value={generationProgress} />
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+
+        <ScrollArea className="flex-1">
+          <div className="p-4">
+            {shotsLoading ? (
+              <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-4"}>
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <Card key={i}>
+                    <Skeleton className="aspect-video w-full" />
+                    <CardContent className="p-4">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-1/2 mt-2" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : shots && shots.length > 0 ? (
+              <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-4"}>
+                {shots.map((shot) => (
+                  <Card
+                    key={shot.id}
+                    className="group hover-elevate cursor-pointer overflow-hidden"
+                    onClick={() => {
+                      setEditingShotId(shot.id);
+                      setShotEdits(shot);
+                    }}
+                    data-testid={`shot-card-${shot.id}`}
+                  >
+                    <div className="aspect-video bg-muted relative">
+                      {shot.imageBase64 ? (
+                        <img
+                          src={`data:image/png;base64,${shot.imageBase64}`}
+                          alt={`Shot ${shot.shotNumber}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Camera className="h-12 w-12 text-muted-foreground/30" />
+                        </div>
+                      )}
+                      <div className="absolute top-2 left-2">
+                        <Badge variant="secondary" className="text-xs">
+                          #{shot.shotNumber}
+                        </Badge>
+                      </div>
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button variant="secondary" size="sm">
+                          <Eye className="mr-2 h-4 w-4" />
+                          编辑
+                        </Button>
+                      </div>
+                    </div>
+                    <CardContent className="p-4">
+                      <p className="text-sm line-clamp-2">{shot.description}</p>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {shot.shotType && (
+                          <Badge variant="outline" className="text-xs">
+                            {shotTypeInfo[shot.shotType]?.nameCN}
+                          </Badge>
+                        )}
+                        {shot.cameraAngle && (
+                          <Badge variant="outline" className="text-xs">
+                            {cameraAngleInfo[shot.cameraAngle]?.nameCN}
+                          </Badge>
+                        )}
+                        {shot.cameraMovement && (
+                          <Badge variant="outline" className="text-xs">
+                            {cameraMovementInfo[shot.cameraMovement]?.nameCN}
+                          </Badge>
+                        )}
+                      </div>
+                      {shot.atmosphere && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          气氛: {shot.atmosphere}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : selectedScene ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <Image className="h-16 w-16 text-muted-foreground/30" />
+                  <h3 className="mt-4 text-lg font-medium">暂无分镜</h3>
+                  <p className="mt-2 text-sm text-muted-foreground text-center max-w-sm">
+                    选择导演风格和画面风格，点击"生成分镜"开始创作
+                  </p>
+                  <Button className="mt-6" onClick={handleGenerate} data-testid="button-generate-first-storyboard">
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    生成分镜
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <Film className="h-16 w-16 text-muted-foreground/30" />
+                  <h3 className="mt-4 text-lg font-medium">请选择场次</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    从左侧选择一个场次来查看或生成分镜
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <Dialog open={!!editingShotId} onOpenChange={(open) => !open && setEditingShotId(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>编辑分镜 #{shotEdits.shotNumber}</DialogTitle>
+            <DialogDescription>
+              调整镜头参数和画面内容
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="aspect-video bg-muted rounded-md overflow-hidden">
+              {shotEdits.imageBase64 ? (
+                <img
+                  src={`data:image/png;base64,${shotEdits.imageBase64}`}
+                  alt="Shot preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Camera className="h-16 w-16 text-muted-foreground/30" />
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">景别</label>
+                <Select 
+                  value={shotEdits.shotType || ""} 
+                  onValueChange={(v) => setShotEdits(prev => ({ ...prev, shotType: v as ShotType }))}
+                >
+                  <SelectTrigger data-testid="select-shot-type">
+                    <SelectValue placeholder="选择景别" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {shotTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {shotTypeInfo[type].nameCN}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">角度</label>
+                <Select 
+                  value={shotEdits.cameraAngle || ""} 
+                  onValueChange={(v) => setShotEdits(prev => ({ ...prev, cameraAngle: v as CameraAngle }))}
+                >
+                  <SelectTrigger data-testid="select-camera-angle">
+                    <SelectValue placeholder="选择角度" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cameraAngles.map((angle) => (
+                      <SelectItem key={angle} value={angle}>
+                        {cameraAngleInfo[angle].nameCN}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">运动</label>
+                <Select 
+                  value={shotEdits.cameraMovement || ""} 
+                  onValueChange={(v) => setShotEdits(prev => ({ ...prev, cameraMovement: v as CameraMovement }))}
+                >
+                  <SelectTrigger data-testid="select-camera-movement">
+                    <SelectValue placeholder="选择运动" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cameraMovements.map((movement) => (
+                      <SelectItem key={movement} value={movement}>
+                        {cameraMovementInfo[movement].nameCN}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">镜头描述</label>
+              <Textarea
+                value={shotEdits.description || ""}
+                onChange={(e) => setShotEdits(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="描述镜头内容..."
+                data-testid="input-shot-description"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">气氛/备注</label>
+              <Textarea
+                value={shotEdits.atmosphere || ""}
+                onChange={(e) => setShotEdits(prev => ({ ...prev, atmosphere: e.target.value }))}
+                placeholder="描述画面气氛，或添加备注..."
+                data-testid="input-shot-atmosphere"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingShotId(null)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingShotId) {
+                  updateShotMutation.mutate({
+                    id: editingShotId,
+                    updates: shotEdits,
+                  });
+                }
+              }}
+              disabled={updateShotMutation.isPending}
+              data-testid="button-save-shot"
+            >
+              {updateShotMutation.isPending ? "保存中..." : "保存更改"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
