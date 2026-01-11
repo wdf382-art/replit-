@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { z } from "zod";
 import multer from "multer";
 import mammoth from "mammoth";
+import * as pdfParse from "pdf-parse";
 import { storage } from "./storage";
 import { openai } from "./replit_integrations/image/client";
 
@@ -10,13 +11,13 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["text/plain", "text/markdown", "application/octet-stream", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
-    const allowedExts = [".txt", ".md", ".fountain", ".docx"];
+    const allowedTypes = ["text/plain", "text/markdown", "application/octet-stream", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/pdf"];
+    const allowedExts = [".txt", ".md", ".fountain", ".docx", ".pdf"];
     const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf("."));
     if (allowedTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error("不支持的文件格式。请上传 .txt, .md, .fountain 或 .docx 格式的剧本文件"));
+      cb(new Error("不支持的文件格式。请上传 .txt, .md, .fountain, .docx 或 .pdf 格式的剧本文件"));
     }
   },
 });
@@ -340,6 +341,9 @@ export async function registerRoutes(
       if (ext === ".docx") {
         const result = await mammoth.extractRawText({ buffer: req.file.buffer });
         content = result.value;
+      } else if (ext === ".pdf") {
+        const result = await pdfParse(req.file.buffer);
+        content = result.text;
       } else {
         content = req.file.buffer.toString("utf-8");
       }
