@@ -111,122 +111,6 @@ export default function StoryboardPage() {
     enabled: !!selectedScene?.id,
   });
 
-  useEffect(() => {
-    if (scenes && scenes.length > 0 && !selectedScene) {
-      setSelectedScene(scenes[0]);
-    }
-  }, [scenes, selectedScene]);
-
-  const generateShotsMutation = useMutation({
-    mutationFn: async (data: { 
-      sceneId: string; 
-      directorStyle: string;
-      customDirectorStyle?: string;
-      visualStyle: string;
-      customVisualStyle?: string;
-      aspectRatio: string;
-      customAspectRatio?: string;
-    }) => {
-      return apiRequest("POST", "/api/shots/generate", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
-      setIsGenerating(false);
-      setGenerationProgress(100);
-      toast({
-        title: "分镜生成完成",
-        description: "AI已为您生成分镜，点击可编辑调整",
-      });
-    },
-    onError: () => {
-      setIsGenerating(false);
-      toast({
-        title: "生成失败",
-        description: "请稍后重试",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const updateShotMutation = useMutation({
-    mutationFn: async (data: { id: string; updates: Partial<Shot> }) => {
-      return apiRequest("PATCH", `/api/shots/${data.id}`, data.updates);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/shots", editingShotId, "versions"] });
-      setEditingShotId(null);
-      setShotEdits({});
-      toast({
-        title: "更新成功",
-        description: "分镜已更新",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "更新失败",
-        description: "请稍后重试",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const { data: shotVersions } = useQuery<ShotVersion[]>({
-    queryKey: ["/api/shots", editingShotId, "versions"],
-    enabled: !!editingShotId,
-    queryFn: async () => {
-      const response = await fetch(`/api/shots/${editingShotId}/versions`);
-      if (!response.ok) throw new Error("Failed to fetch versions");
-      return response.json();
-    },
-  });
-
-  const saveShotVersionMutation = useMutation({
-    mutationFn: async (shotId: string) => {
-      return apiRequest("POST", `/api/shots/${shotId}/versions`, {
-        changeDescription: "手动保存版本",
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shots", editingShotId, "versions"] });
-      toast({
-        title: "版本已保存",
-        description: "当前分镜版本已保存",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "保存失败",
-        description: "无法保存版本",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const restoreShotVersionMutation = useMutation({
-    mutationFn: async ({ shotId, versionId }: { shotId: string; versionId: string }) => {
-      return apiRequest("POST", `/api/shots/${shotId}/versions/${versionId}/restore`, {});
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/shots", editingShotId, "versions"] });
-      setConfirmRestoreShot(false);
-      setSelectedShotVersion(null);
-      setShowShotVersions(false);
-      toast({
-        title: "版本已恢复",
-        description: "分镜已恢复到选定版本",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "恢复失败",
-        description: "无法恢复版本",
-        variant: "destructive",
-      });
-    },
-  });
-
   const { data: callSheets } = useQuery<CallSheet[]>({
     queryKey: ["/api/call-sheets", currentProject?.id],
     enabled: !!currentProject?.id,
@@ -237,6 +121,12 @@ export default function StoryboardPage() {
     const callSheet = callSheets?.find((cs) => cs.id === selectedCallSheetId);
     return callSheet?.sceneNumbers?.includes(scene.sceneNumber);
   });
+
+  useEffect(() => {
+    if (scenes && scenes.length > 0 && !selectedScene) {
+      setSelectedScene(scenes[0]);
+    }
+  }, [scenes, selectedScene]);
 
   const handleCallSheetUpload = async () => {
     if (!currentProject?.id || !callSheetTitle.trim() || !callSheetText.trim()) {
