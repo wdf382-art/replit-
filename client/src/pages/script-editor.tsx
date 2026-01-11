@@ -15,6 +15,8 @@ import {
   AlertCircle,
   Upload,
   File,
+  ClipboardList,
+  ArrowRight,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,8 +38,9 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
-import type { Project, Script, Scene, ProjectType } from "@shared/schema";
+import type { Project, Script, Scene, ProjectType, CallSheet } from "@shared/schema";
 import { projectTypes, projectTypeInfo } from "@shared/schema";
+import { Input } from "@/components/ui/input";
 
 export default function ScriptEditorPage() {
   const [location] = useLocation();
@@ -54,6 +57,12 @@ export default function ScriptEditorPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [extractScenes, setExtractScenes] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [callSheetFile, setCallSheetFile] = useState<File | null>(null);
+  const [callSheetTitle, setCallSheetTitle] = useState("");
+  const [callSheetText, setCallSheetText] = useState("");
+  const [callSheetInputMode, setCallSheetInputMode] = useState<"upload" | "manual">("upload");
+  const [isUploadingCallSheet, setIsUploadingCallSheet] = useState(false);
+  const [, setLocation] = useLocation();
 
   const projectId = new URLSearchParams(location.split("?")[1] || "").get("project");
 
@@ -70,6 +79,69 @@ export default function ScriptEditorPage() {
     queryKey: ["/api/scenes", currentProject?.id],
     enabled: !!currentProject?.id,
   });
+
+  const { data: callSheets } = useQuery<CallSheet[]>({
+    queryKey: ["/api/call-sheets", currentProject?.id],
+    enabled: !!currentProject?.id,
+  });
+
+  const handleCallSheetUpload = async () => {
+    if (!currentProject?.id || !callSheetTitle.trim()) {
+      toast({
+        title: "请填写通告单标题",
+        description: "请先输入通告单标题",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingCallSheet(true);
+    try {
+      if (callSheetInputMode === "upload" && callSheetFile) {
+        const formData = new FormData();
+        formData.append("file", callSheetFile);
+        formData.append("projectId", currentProject.id);
+        formData.append("title", callSheetTitle);
+
+        const response = await fetch("/api/call-sheets/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) throw new Error("Upload failed");
+        
+        queryClient.invalidateQueries({ queryKey: ["/api/call-sheets"] });
+        toast({
+          title: "通告单上传成功",
+          description: "已自动提取场次信息",
+        });
+      } else if (callSheetInputMode === "manual" && callSheetText.trim()) {
+        await apiRequest("POST", "/api/call-sheets/parse-text", {
+          projectId: currentProject.id,
+          title: callSheetTitle,
+          rawText: callSheetText,
+        });
+        
+        queryClient.invalidateQueries({ queryKey: ["/api/call-sheets"] });
+        toast({
+          title: "通告单创建成功",
+          description: "已自动提取场次信息",
+        });
+      }
+      
+      setCallSheetFile(null);
+      setCallSheetTitle("");
+      setCallSheetText("");
+    } catch (error) {
+      toast({
+        title: "通告单处理失败",
+        description: "请检查文件格式后重试",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingCallSheet(false);
+    }
+  };
 
   useEffect(() => {
     if (projectId && projects) {
@@ -288,6 +360,10 @@ export default function ScriptEditorPage() {
                   <TabsTrigger value="history" data-testid="tab-history">
                     <History className="mr-2 h-4 w-4" />
                     版本历史
+                  </TabsTrigger>
+                  <TabsTrigger value="callsheet" data-testid="tab-callsheet">
+                    <ClipboardList className="mr-2 h-4 w-4" />
+                    通告单
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -593,11 +669,160 @@ export default function ScriptEditorPage() {
                   </Card>
                 </div>
               </TabsContent>
+
+              <TabsContent value="callsheet" className="flex-1 overflow-auto p-4 mt-0">
+                <div className="max-w-3xl mx-auto space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <ClipboardList className="h-5 w-5 text-primary" />
+                        通告单管理
+                      </CardTitle>
+                      <CardDescription>
+                        上传或手动输入通告单，系统将自动提取场次信息用于分镜生成
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">通告单标题</label>
+                        <Input
+                          placeholder="例如：第一集 第1天 通告单"
+                          value={callSheetTitle}
+                          onChange={(e) => setCallSheetTitle(e.target.value)}
+                          data-testid="input-callsheet-title"
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          variant={callSheetInputMode === "upload" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCallSheetInputMode("upload")}
+                          data-testid="button-callsheet-upload-mode"
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          文件上传
+                        </Button>
+                        <Button
+                          variant={callSheetInputMode === "manual" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCallSheetInputMode("manual")}
+                          data-testid="button-callsheet-manual-mode"
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          手动输入
+                        </Button>
+                      </div>
+
+                      {callSheetInputMode === "upload" ? (
+                        <div
+                          className="border-2 border-dashed rounded-md p-8 text-center cursor-pointer transition-colors hover:border-primary/50"
+                          onClick={() => document.getElementById("callsheet-file-input")?.click()}
+                        >
+                          <input
+                            id="callsheet-file-input"
+                            type="file"
+                            className="hidden"
+                            accept=".txt,.docx,.pdf"
+                            onChange={(e) => setCallSheetFile(e.target.files?.[0] || null)}
+                          />
+                          {callSheetFile ? (
+                            <div className="space-y-2">
+                              <File className="h-12 w-12 mx-auto text-primary" />
+                              <p className="font-medium">{callSheetFile.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {(callSheetFile.size / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
+                              <p className="font-medium">点击选择通告单文件</p>
+                              <p className="text-sm text-muted-foreground">
+                                支持 .txt、.docx、.pdf 格式，最大 5MB
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <Textarea
+                          placeholder="请粘贴通告单内容，例如：&#10;&#10;场次: 1, 3, 5-8&#10;场景: 法医实验室&#10;演员: 秦明、林涛&#10;..."
+                          className="min-h-48"
+                          value={callSheetText}
+                          onChange={(e) => setCallSheetText(e.target.value)}
+                          data-testid="textarea-callsheet"
+                        />
+                      )}
+
+                      <Button
+                        onClick={handleCallSheetUpload}
+                        disabled={isUploadingCallSheet || !callSheetTitle.trim() || (callSheetInputMode === "upload" ? !callSheetFile : !callSheetText.trim())}
+                        className="w-full"
+                        data-testid="button-submit-callsheet"
+                      >
+                        {isUploadingCallSheet ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            处理中...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="mr-2 h-4 w-4" />
+                            保存通告单
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {callSheets && callSheets.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">已保存的通告单</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {callSheets.map((sheet) => (
+                            <div
+                              key={sheet.id}
+                              className="flex items-center justify-between p-3 border rounded-md"
+                              data-testid={`callsheet-item-${sheet.id}`}
+                            >
+                              <div>
+                                <p className="font-medium">{sheet.title}</p>
+                                {sheet.sceneNumbers && sheet.sceneNumbers.length > 0 && (
+                                  <p className="text-xs text-muted-foreground">
+                                    场次: {sheet.sceneNumbers.join(", ")}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge variant="secondary">
+                                {sheet.sceneNumbers?.length || 0} 场
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </TabsContent>
             </Tabs>
           </div>
 
           <div className="w-72 border-l overflow-auto hidden lg:block">
             <div className="p-4 space-y-4">
+              {scenes && scenes.length > 0 && (
+                <Button
+                  className="w-full"
+                  onClick={() => setLocation("/storyboard")}
+                  data-testid="button-next-step"
+                >
+                  下一步：生成分镜
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+
               <div>
                 <h3 className="font-medium mb-3">场次列表</h3>
                 {scenes && scenes.length > 0 ? (

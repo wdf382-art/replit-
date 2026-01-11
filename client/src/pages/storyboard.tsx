@@ -46,7 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
-import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement } from "@shared/schema";
+import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio } from "@shared/schema";
 import {
   directorStyles,
   directorStyleInfo,
@@ -58,15 +58,21 @@ import {
   cameraAngleInfo,
   cameraMovements,
   cameraMovementInfo,
+  aspectRatios,
 } from "@shared/schema";
+import { Input } from "@/components/ui/input";
 
 export default function StoryboardPage() {
   const { toast } = useToast();
   const { currentProject, setCurrentProject } = useAppStore();
   
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [selectedDirectorStyle, setSelectedDirectorStyle] = useState<DirectorStyle>("christopher_nolan");
-  const [selectedVisualStyle, setSelectedVisualStyle] = useState<VisualStyle>("cinematic");
+  const [selectedDirectorStyle, setSelectedDirectorStyle] = useState<DirectorStyle | "custom">("christopher_nolan");
+  const [customDirectorStyle, setCustomDirectorStyle] = useState("");
+  const [selectedVisualStyle, setSelectedVisualStyle] = useState<VisualStyle | "custom">("cinematic");
+  const [customVisualStyle, setCustomVisualStyle] = useState("");
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState<AspectRatio>("16:9");
+  const [customAspectRatio, setCustomAspectRatio] = useState("");
   const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
@@ -295,10 +301,10 @@ export default function StoryboardPage() {
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">导演风格</label>
-                  <Select value={selectedDirectorStyle} onValueChange={(v) => setSelectedDirectorStyle(v as DirectorStyle)}>
+                  <Select value={selectedDirectorStyle} onValueChange={(v) => setSelectedDirectorStyle(v as DirectorStyle | "custom")}>
                     <SelectTrigger data-testid="select-director-style">
                       <SelectValue />
                     </SelectTrigger>
@@ -308,9 +314,17 @@ export default function StoryboardPage() {
                           {directorStyleInfo[style].nameCN} ({directorStyleInfo[style].name})
                         </SelectItem>
                       ))}
+                      <SelectItem value="custom">自定义风格</SelectItem>
                     </SelectContent>
                   </Select>
-                  {currentDirector && (
+                  {selectedDirectorStyle === "custom" ? (
+                    <Input
+                      placeholder="描述导演风格，如：长镜头、手持摄影..."
+                      value={customDirectorStyle}
+                      onChange={(e) => setCustomDirectorStyle(e.target.value)}
+                      data-testid="input-custom-director-style"
+                    />
+                  ) : currentDirector && (
                     <p className="text-xs text-muted-foreground">
                       {currentDirector.traits}
                     </p>
@@ -319,7 +333,7 @@ export default function StoryboardPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">画面风格</label>
-                  <Select value={selectedVisualStyle} onValueChange={(v) => setSelectedVisualStyle(v as VisualStyle)}>
+                  <Select value={selectedVisualStyle} onValueChange={(v) => setSelectedVisualStyle(v as VisualStyle | "custom")}>
                     <SelectTrigger data-testid="select-visual-style">
                       <SelectValue />
                     </SelectTrigger>
@@ -329,8 +343,47 @@ export default function StoryboardPage() {
                           {visualStyleInfo[style].nameCN}
                         </SelectItem>
                       ))}
+                      <SelectItem value="custom">自定义风格</SelectItem>
                     </SelectContent>
                   </Select>
+                  {selectedVisualStyle === "custom" && (
+                    <Input
+                      placeholder="描述画面风格，如：高对比度、暖色调..."
+                      value={customVisualStyle}
+                      onChange={(e) => setCustomVisualStyle(e.target.value)}
+                      data-testid="input-custom-visual-style"
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">画幅比例</label>
+                  <Select value={selectedAspectRatio} onValueChange={(v) => setSelectedAspectRatio(v as AspectRatio)}>
+                    <SelectTrigger data-testid="select-aspect-ratio">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {aspectRatios.map((ratio) => (
+                        <SelectItem key={ratio} value={ratio}>
+                          {ratio === "16:9" ? "16:9 (标准宽屏)" :
+                           ratio === "2.35:1" ? "2.35:1 (宽银幕)" :
+                           ratio === "4:3" ? "4:3 (传统)" :
+                           ratio === "1:1" ? "1:1 (方形)" :
+                           ratio === "9:16" ? "9:16 (竖屏)" :
+                           ratio === "1.85:1" ? "1.85:1 (学院宽银幕)" :
+                           "自定义"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedAspectRatio === "custom" && (
+                    <Input
+                      placeholder="例如：2.39:1"
+                      value={customAspectRatio}
+                      onChange={(e) => setCustomAspectRatio(e.target.value)}
+                      data-testid="input-custom-aspect-ratio"
+                    />
+                  )}
                 </div>
 
                 <div className="flex items-end">

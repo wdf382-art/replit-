@@ -276,24 +276,6 @@ export const insertProductionNotesSchema = createInsertSchema(productionNotes).o
 export type InsertProductionNotes = z.infer<typeof insertProductionNotesSchema>;
 export type ProductionNotes = typeof productionNotes.$inferSelect;
 
-// Call sheets table
-export const callSheets = pgTable("call_sheets", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
-  shootDate: timestamp("shoot_date").notNull(),
-  sceneIds: jsonb("scene_ids").$type<string[]>(),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
-
-export const insertCallSheetSchema = createInsertSchema(callSheets).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertCallSheet = z.infer<typeof insertCallSheetSchema>;
-export type CallSheet = typeof callSheets.$inferSelect;
-
 // Director style info for display
 export const directorStyleInfo: Record<DirectorStyle, { name: string; nameCN: string; traits: string; works: string }> = {
   quentin_tarantino: { name: "Quentin Tarantino", nameCN: "昆汀·塔伦蒂诺", traits: "长对话、脚部特写、非线性叙事、暴力美学", works: "《低俗小说》《杀死比尔》" },
