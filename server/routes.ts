@@ -1063,11 +1063,24 @@ ${content.substring(0, 8000)}
       }
       const uniqueSceneNumbers = [...new Set(sceneNumbers)].sort((a, b) => a - b);
 
+      // 提取场次信息
+      const sceneNumbers = uniqueSceneNumbers;
+      
+      // 关键修复：同步更新项目中的场次状态
+      if (sceneNumbers.length > 0) {
+        const scenes = await storage.getScenes(projectId);
+        for (const scene of scenes) {
+          if (sceneNumbers.includes(scene.sceneNumber)) {
+            await storage.updateScene(scene.id, { isInCallSheet: true });
+          }
+        }
+      }
+
       const callSheet = await storage.createCallSheet({
         projectId,
         title,
         rawText,
-        sceneNumbers: uniqueSceneNumbers,
+        sceneNumbers,
       });
 
       res.status(201).json(callSheet);

@@ -385,21 +385,18 @@ export default function StoryboardPage() {
                   key={scene.id}
                   onClick={() => {
                     setSelectedScene(scene);
-                    if (scene.isInCallSheet) {
-                      setShowSceneDetails(true);
-                    }
                   }}
                   className={`p-3 border rounded-md cursor-pointer transition-colors ${
                     selectedScene?.id === scene.id
                       ? "border-primary bg-primary/5"
                       : "hover-elevate"
-                  }`}
+                  } ${scene.isInCallSheet ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
                   data-testid={`scene-item-${scene.id}`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm">场次 {scene.sceneNumber}</span>
                     {scene.isInCallSheet && (
-                      <Badge variant="secondary" className="text-xs">通告</Badge>
+                      <Badge variant="default" className="text-xs bg-primary text-primary-foreground">通告</Badge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
