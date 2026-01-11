@@ -1065,14 +1065,16 @@ ${content.substring(0, 8000)}
 
       // 提取场次信息
       const sceneNumbers = uniqueSceneNumbers;
+      console.log(`Extracted scene numbers: ${sceneNumbers.join(', ')} for project: ${projectId}`);
       
-      // 关键修复：同步更新项目中的场次状态
-      if (sceneNumbers.length > 0) {
-        const scenes = await storage.getScenes(projectId);
-        for (const scene of scenes) {
-          if (sceneNumbers.includes(scene.sceneNumber)) {
-            await storage.updateScene(scene.id, { isInCallSheet: true });
-          }
+      // 关键修复：同步更新项目中的所有匹配场次
+      const allProjectScenes = await storage.getScenes(projectId);
+      console.log(`Found ${allProjectScenes.length} total scenes in project`);
+
+      for (const scene of allProjectScenes) {
+        if (sceneNumbers.includes(scene.sceneNumber)) {
+          console.log(`Updating scene ${scene.sceneNumber} (ID: ${scene.id}) to isInCallSheet: true`);
+          await storage.updateScene(scene.id, { isInCallSheet: true });
         }
       }
 

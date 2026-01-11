@@ -390,13 +390,13 @@ export default function StoryboardPage() {
                     selectedScene?.id === scene.id
                       ? "border-primary bg-primary/5"
                       : "hover-elevate"
-                  } ${scene.isInCallSheet ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
+                  } ${scene.isInCallSheet ? "border-primary ring-1 ring-primary" : ""}`}
                   data-testid={`scene-item-${scene.id}`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm">场次 {scene.sceneNumber}</span>
                     {scene.isInCallSheet && (
-                      <Badge variant="default" className="text-xs bg-primary text-primary-foreground">通告</Badge>
+                      <Badge variant="default" className="text-xs bg-red-500 text-white animate-pulse">待处理</Badge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
