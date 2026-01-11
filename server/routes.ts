@@ -955,12 +955,18 @@ ${content.substring(0, 8000)}
         rawText = pdfData.text;
       }
 
-      const sceneNumberPattern = /(?:场[次号]|Scene|S)[:\s]?\s*(\d+(?:[,，、\s-]\d+)*)/gi;
+      // 改进正则表达式以匹配更广泛的中文场次描述
+      // 匹配：第X场、第X集、X场、场次X、场次:X 等
+      const sceneNumberPattern = /(?:第?\s*(\d+)\s*[场集次])|(?:场次[:：\s]?\s*(\d+))/gi;
       const matches = rawText.matchAll(sceneNumberPattern);
       const sceneNumbers: number[] = [];
       for (const match of matches) {
-        const nums = match[1].split(/[,，、\s-]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n));
-        sceneNumbers.push(...nums);
+        // match[1] 是第一种格式捕获的数字，match[2] 是第二种格式捕获的数字
+        const numStr = match[1] || match[2];
+        const num = parseInt(numStr);
+        if (!isNaN(num)) {
+          sceneNumbers.push(num);
+        }
       }
       const uniqueSceneNumbers = [...new Set(sceneNumbers)].sort((a, b) => a - b);
 
@@ -990,12 +996,18 @@ ${content.substring(0, 8000)}
         return res.status(400).json({ error: "projectId, title和rawText是必需的" });
       }
 
-      const sceneNumberPattern = /(?:场[次号]|Scene|S)[:\s]?\s*(\d+(?:[,，、\s-]\d+)*)/gi;
+      // 改进正则表达式以匹配更广泛的中文场次描述
+      // 匹配：第X场、第X集、X场、场次X、场次:X 等
+      const sceneNumberPattern = /(?:第?\s*(\d+)\s*[场集次])|(?:场次[:：\s]?\s*(\d+))/gi;
       const matches = rawText.matchAll(sceneNumberPattern);
       const sceneNumbers: number[] = [];
       for (const match of matches) {
-        const nums = match[1].split(/[,，、\s-]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n));
-        sceneNumbers.push(...nums);
+        // match[1] 是第一种格式捕获的数字，match[2] 是第二种格式捕获的数字
+        const numStr = match[1] || match[2];
+        const num = parseInt(numStr);
+        if (!isNaN(num)) {
+          sceneNumbers.push(num);
+        }
       }
       const uniqueSceneNumbers = [...new Set(sceneNumbers)].sort((a, b) => a - b);
 

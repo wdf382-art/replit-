@@ -49,7 +49,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
-import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio, ShotVersion } from "@shared/schema";
+import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio, ShotVersion, CallSheet } from "@shared/schema";
 import {
   directorStyles,
   directorStyleInfo,
@@ -239,11 +239,19 @@ export default function StoryboardPage() {
 
     setIsUploadingCallSheet(true);
     try {
-      await apiRequest("POST", "/api/call-sheets/parse-text", {
+      console.log("Sending call sheet request:", {
         projectId: currentProject.id,
         title: callSheetTitle,
         rawText: callSheetText,
       });
+
+      const response = await apiRequest("POST", "/api/call-sheets/parse-text", {
+        projectId: currentProject.id,
+        title: callSheetTitle,
+        rawText: callSheetText,
+      });
+
+      console.log("Call sheet response:", response);
 
       queryClient.invalidateQueries({ queryKey: ["/api/call-sheets", currentProject.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject.id] });
