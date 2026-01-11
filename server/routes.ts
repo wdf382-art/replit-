@@ -30,6 +30,7 @@ import {
   insertPerformanceGuideSchema,
   insertSceneAnalysisSchema,
   insertProductionNotesSchema,
+  insertCallSheetSchema,
   directorStyleInfo,
   visualStyleInfo,
   shotTypeInfo,
@@ -840,6 +841,131 @@ ${director.nameCN}的风格特点：${director.traits}
     } catch (error) {
       console.error("Error exporting:", error);
       res.status(500).json({ error: "Failed to export" });
+    }
+  });
+
+  app.get("/api/call-sheets", async (req, res) => {
+    try {
+      const projectId = req.query.projectId as string;
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required" });
+      }
+      const callSheets = await storage.getCallSheets(projectId);
+      res.json(callSheets);
+    } catch (error) {
+      console.error("Error fetching call sheets:", error);
+      res.status(500).json({ error: "Failed to fetch call sheets" });
+    }
+  });
+
+  app.post("/api/call-sheets", async (req, res) => {
+    try {
+      const parsed = insertCallSheetSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const callSheet = await storage.createCallSheet(parsed.data);
+      res.status(201).json(callSheet);
+    } catch (error) {
+      console.error("Error creating call sheet:", error);
+      res.status(500).json({ error: "Failed to create call sheet" });
+    }
+  });
+
+  const callSheetUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = ["text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/pdf"];
+      const allowedExts = [".txt", ".docx", ".pdf"];
+      const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf("."));
+      if (allowedTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
+        cb(null, true);
+      } else {
+        cb(new Error("不支持的文件格式。请上传 .txt, .docx 或 .pdf 格式的通告单文件"));
+      }
+    },
+  });
+
+  app.post("/api/call-sheets/upload", callSheetUpload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "未上传文件" });
+      }
+
+      const { projectId, title } = req.body;
+      if (!projectId || !title) {
+        return res.status(400).json({ error: "projectId和title是必需的" });
+      }
+
+      let rawText = "";
+      const ext = req.file.originalname.toLowerCase().substring(req.file.originalname.lastIndexOf("."));
+
+      if (ext === ".txt") {
+        rawText = req.file.buffer.toString("utf-8");
+      } else if (ext === ".docx") {
+        const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+        rawText = result.value;
+      } else if (ext === ".pdf") {
+        const pdfData = await pdfParse.default(req.file.buffer);
+        rawText = pdfData.text;
+      }
+
+      const sceneNumberPattern = /(?:场[次号]|Scene|S)[:\s]?\s*(\d+(?:[,，、\s-]\d+)*)/gi;
+      const matches = rawText.matchAll(sceneNumberPattern);
+      const sceneNumbers: number[] = [];
+      for (const match of matches) {
+        const nums = match[1].split(/[,，、\s-]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+        sceneNumbers.push(...nums);
+      }
+      const uniqueSceneNumbers = [...new Set(sceneNumbers)].sort((a, b) => a - b);
+
+      const callSheet = await storage.createCallSheet({
+        projectId,
+        title,
+        rawText,
+        sceneNumbers: uniqueSceneNumbers,
+        fileMetadata: {
+          fileName: req.file.originalname,
+          fileType: ext.slice(1),
+          uploadedAt: new Date().toISOString(),
+        },
+      });
+
+      res.status(201).json(callSheet);
+    } catch (error) {
+      console.error("Error uploading call sheet:", error);
+      res.status(500).json({ error: "Failed to upload call sheet" });
+    }
+  });
+
+  app.post("/api/call-sheets/parse-text", async (req, res) => {
+    try {
+      const { projectId, title, rawText } = req.body;
+      if (!projectId || !title || !rawText) {
+        return res.status(400).json({ error: "projectId, title和rawText是必需的" });
+      }
+
+      const sceneNumberPattern = /(?:场[次号]|Scene|S)[:\s]?\s*(\d+(?:[,，、\s-]\d+)*)/gi;
+      const matches = rawText.matchAll(sceneNumberPattern);
+      const sceneNumbers: number[] = [];
+      for (const match of matches) {
+        const nums = match[1].split(/[,，、\s-]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+        sceneNumbers.push(...nums);
+      }
+      const uniqueSceneNumbers = [...new Set(sceneNumbers)].sort((a, b) => a - b);
+
+      const callSheet = await storage.createCallSheet({
+        projectId,
+        title,
+        rawText,
+        sceneNumbers: uniqueSceneNumbers,
+      });
+
+      res.status(201).json(callSheet);
+    } catch (error) {
+      console.error("Error parsing call sheet text:", error);
+      res.status(500).json({ error: "Failed to parse call sheet" });
     }
   });
 

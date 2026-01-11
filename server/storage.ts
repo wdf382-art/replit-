@@ -452,7 +452,7 @@ export class MemStorage implements IStorage {
   async getCallSheets(projectId: string): Promise<CallSheet[]> {
     return Array.from(this.callSheets.values())
       .filter((c) => c.projectId === projectId)
-      .sort((a, b) => new Date(a.shootDate).getTime() - new Date(b.shootDate).getTime());
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async createCallSheet(insertCallSheet: InsertCallSheet): Promise<CallSheet> {
@@ -460,8 +460,9 @@ export class MemStorage implements IStorage {
     const callSheet: CallSheet = {
       ...insertCallSheet,
       id,
-      sceneIds: insertCallSheet.sceneIds || null,
-      notes: insertCallSheet.notes || null,
+      rawText: insertCallSheet.rawText || null,
+      sceneNumbers: insertCallSheet.sceneNumbers || null,
+      fileMetadata: insertCallSheet.fileMetadata || null,
       createdAt: new Date(),
     };
     this.callSheets.set(id, callSheet);
