@@ -886,7 +886,7 @@ ${content.substring(0, 8000)}
 画面风格要求：${visualDescription}
 画幅比例：${finalAspectRatio || "16:9"}
 
-请设计5-8个镜头，体现导演风格特点。
+请设计8-12个镜头，体现导演风格特点。镜头数量必须至少8个。
 
 返回JSON格式：
 {
@@ -956,6 +956,130 @@ ${content.substring(0, 8000)}
     } catch (error) {
       console.error("Error updating shot:", error);
       res.status(500).json({ error: "Failed to update shot" });
+    }
+  });
+
+  // Generate image for a single shot
+  app.post("/api/shots/:id/generate-image", async (req, res) => {
+    try {
+      const shot = await storage.getShot(req.params.id);
+      if (!shot) {
+        return res.status(404).json({ error: "Shot not found" });
+      }
+
+      const scene = await storage.getScene(shot.sceneId);
+      
+      // Build a comprehensive prompt for image generation
+      const imagePrompt = `电影分镜画面：
+场景：${scene?.title || ""}
+地点：${scene?.location || ""}
+时间：${scene?.timeOfDay || ""}
+
+镜头${shot.shotNumber}：${shot.description}
+景别：${shot.shotType || "中景"}
+角度：${shot.cameraAngle || "平视"}
+运动：${shot.cameraMovement || "固定"}
+${shot.atmosphere ? `氛围：${shot.atmosphere}` : ""}
+
+要求：电影画面风格，专业电影摄影构图，高质量，电影感，16:9画幅`;
+
+      // Use Gemini to generate image
+      const { GoogleGenAI, Modality } = await import("@google/genai");
+      const ai = new GoogleGenAI({
+        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+      });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash-exp-image-generation",
+        contents: imagePrompt,
+        config: {
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+        },
+      });
+
+      const candidate = response.candidates?.[0];
+      const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
+
+      if (!imagePart?.inlineData?.data) {
+        return res.status(500).json({ error: "Failed to generate image" });
+      }
+
+      // Save image to the shot
+      const updatedShot = await storage.updateShot(shot.id, {
+        imageBase64: imagePart.inlineData.data,
+      });
+
+      res.json(updatedShot);
+    } catch (error) {
+      console.error("Error generating shot image:", error);
+      res.status(500).json({ error: "Failed to generate shot image" });
+    }
+  });
+
+  // Generate images for all shots in a scene
+  app.post("/api/scenes/:id/generate-all-images", async (req, res) => {
+    try {
+      const scene = await storage.getScene(req.params.id);
+      if (!scene) {
+        return res.status(404).json({ error: "Scene not found" });
+      }
+
+      const shots = await storage.getShots(req.params.id);
+      if (!shots || shots.length === 0) {
+        return res.status(400).json({ error: "No shots to generate images for" });
+      }
+
+      const { GoogleGenAI, Modality } = await import("@google/genai");
+      const ai = new GoogleGenAI({
+        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+      });
+
+      const results = [];
+      
+      for (const shot of shots) {
+        try {
+          const imagePrompt = `电影分镜画面：
+场景：${scene.title || ""}
+地点：${scene.location || ""}
+时间：${scene.timeOfDay || ""}
+
+镜头${shot.shotNumber}：${shot.description}
+景别：${shot.shotType || "中景"}
+角度：${shot.cameraAngle || "平视"}
+运动：${shot.cameraMovement || "固定"}
+${shot.atmosphere ? `氛围：${shot.atmosphere}` : ""}
+
+要求：电影画面风格，专业电影摄影构图，高质量，电影感，16:9画幅`;
+
+          const response = await ai.models.generateContent({
+            model: "gemini-2.0-flash-exp-image-generation",
+            contents: imagePrompt,
+            config: {
+              responseModalities: [Modality.TEXT, Modality.IMAGE],
+            },
+          });
+
+          const candidate = response.candidates?.[0];
+          const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
+
+          if (imagePart?.inlineData?.data) {
+            const updatedShot = await storage.updateShot(shot.id, {
+              imageBase64: imagePart.inlineData.data,
+            });
+            results.push({ id: shot.id, success: true });
+          } else {
+            results.push({ id: shot.id, success: false, error: "No image data" });
+          }
+        } catch (err) {
+          console.error(`Error generating image for shot ${shot.id}:`, err);
+          results.push({ id: shot.id, success: false, error: "Generation failed" });
+        }
+      }
+
+      res.json({ results, totalGenerated: results.filter(r => r.success).length });
+    } catch (error) {
+      console.error("Error generating scene images:", error);
+      res.status(500).json({ error: "Failed to generate scene images" });
     }
   });
 

@@ -66,7 +66,7 @@ import {
 } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
-import { History, Save } from "lucide-react";
+import { History, Save, ImagePlus, Loader2 } from "lucide-react";
 
 export default function StoryboardPage() {
   const { toast } = useToast();
@@ -108,6 +108,9 @@ export default function StoryboardPage() {
     action: string | null;
   } | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+  const [isGeneratingAllImages, setIsGeneratingAllImages] = useState(false);
+  const [imageGenProgress, setImageGenProgress] = useState(0);
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -193,6 +196,56 @@ export default function StoryboardPage() {
     onError: () => {
       toast({
         title: "更新失败",
+        description: "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Generate image for a single shot
+  const generateShotImageMutation = useMutation({
+    mutationFn: async (shotId: string) => {
+      setGeneratingImageId(shotId);
+      return apiRequest("POST", `/api/shots/${shotId}/generate-image`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+      setGeneratingImageId(null);
+      toast({
+        title: "图片生成完成",
+        description: "分镜图片已生成",
+      });
+    },
+    onError: () => {
+      setGeneratingImageId(null);
+      toast({
+        title: "生成失败",
+        description: "图片生成失败，请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Generate images for all shots in the scene
+  const generateAllImagesMutation = useMutation({
+    mutationFn: async (sceneId: string) => {
+      setIsGeneratingAllImages(true);
+      setImageGenProgress(0);
+      return apiRequest("POST", `/api/scenes/${sceneId}/generate-all-images`);
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+      setIsGeneratingAllImages(false);
+      setImageGenProgress(100);
+      toast({
+        title: "批量图片生成完成",
+        description: `成功生成 ${data.totalGenerated} 张图片`,
+      });
+    },
+    onError: () => {
+      setIsGeneratingAllImages(false);
+      toast({
+        title: "批量生成失败",
         description: "请稍后重试",
         variant: "destructive",
       });
@@ -824,7 +877,35 @@ export default function StoryboardPage() {
                 ))}
               </div>
             ) : shots && shots.length > 0 ? (
-              <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-4"}>
+              <div className="space-y-4">
+                {/* Header with action buttons */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="text-sm text-muted-foreground">
+                    共 {shots.length} 个镜头
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => selectedScene && generateAllImagesMutation.mutate(selectedScene.id)}
+                    disabled={isGeneratingAllImages || !selectedScene}
+                    data-testid="button-generate-all-images"
+                  >
+                    {isGeneratingAllImages ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        批量生成中...
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus className="mr-2 h-4 w-4" />
+                        一键生成所有图片
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Shots grid */}
+                <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-4"}>
                 {shots.map((shot) => (
                   <Card
                     key={shot.id}
@@ -843,8 +924,30 @@ export default function StoryboardPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center">
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-2">
                           <Camera className="h-12 w-12 text-muted-foreground/30" />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              generateShotImageMutation.mutate(shot.id);
+                            }}
+                            disabled={generatingImageId === shot.id}
+                            data-testid={`button-generate-image-${shot.id}`}
+                          >
+                            {generatingImageId === shot.id ? (
+                              <>
+                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                生成中...
+                              </>
+                            ) : (
+                              <>
+                                <ImagePlus className="mr-2 h-3 w-3" />
+                                生成图片
+                              </>
+                            )}
+                          </Button>
                         </div>
                       )}
                       <div className="absolute top-2 left-2">
@@ -852,11 +955,28 @@ export default function StoryboardPage() {
                           #{shot.shotNumber}
                         </Badge>
                       </div>
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                         <Button variant="secondary" size="sm">
                           <Eye className="mr-2 h-4 w-4" />
                           编辑
                         </Button>
+                        {!shot.imageBase64 && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              generateShotImageMutation.mutate(shot.id);
+                            }}
+                            disabled={generatingImageId === shot.id}
+                          >
+                            {generatingImageId === shot.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <ImagePlus className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
                     <CardContent className="p-4">
@@ -886,6 +1006,7 @@ export default function StoryboardPage() {
                     </CardContent>
                   </Card>
                 ))}
+                </div>
               </div>
             ) : selectedScene ? (
               <Card>
