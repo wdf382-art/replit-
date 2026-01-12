@@ -862,8 +862,8 @@ export default function StoryboardPage() {
           </Collapsible>
         </div>
 
-        <ScrollArea className="flex-1">
-          <div className="p-4">
+        <ScrollArea className="flex-1 h-full">
+          <div className="p-4 pb-20">
             {shotsLoading ? (
               <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-4"}>
                 {[1, 2, 3, 4, 5, 6].map((i) => (

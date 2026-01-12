@@ -970,43 +970,28 @@ ${content.substring(0, 8000)}
       const scene = await storage.getScene(shot.sceneId);
       
       // Build a comprehensive prompt for image generation
-      const imagePrompt = `电影分镜画面：
-场景：${scene?.title || ""}
-地点：${scene?.location || ""}
-时间：${scene?.timeOfDay || ""}
+      const imagePrompt = `Film storyboard frame, cinematic style:
+Scene: ${scene?.title || ""}
+Location: ${scene?.location || ""}
+Time: ${scene?.timeOfDay || ""}
 
-镜头${shot.shotNumber}：${shot.description}
-景别：${shot.shotType || "中景"}
-角度：${shot.cameraAngle || "平视"}
-运动：${shot.cameraMovement || "固定"}
-${shot.atmosphere ? `氛围：${shot.atmosphere}` : ""}
+Shot ${shot.shotNumber}: ${shot.description}
+Shot type: ${shot.shotType || "medium shot"}
+Camera angle: ${shot.cameraAngle || "eye level"}
+Camera movement: ${shot.cameraMovement || "static"}
+${shot.atmosphere ? `Atmosphere: ${shot.atmosphere}` : ""}
 
-要求：电影画面风格，专业电影摄影构图，高质量，电影感，16:9画幅`;
+Requirements: Professional film cinematography, cinematic lighting, high quality, movie style, 16:9 aspect ratio`;
 
-      // Use Gemini to generate image
-      const { GoogleGenAI, Modality } = await import("@google/genai");
-      const ai = new GoogleGenAI({
-        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-      });
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-exp-image-generation",
-        contents: imagePrompt,
-        config: {
-          responseModalities: [Modality.TEXT, Modality.IMAGE],
-        },
-      });
-
-      const candidate = response.candidates?.[0];
-      const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
-
-      if (!imagePart?.inlineData?.data) {
-        return res.status(500).json({ error: "Failed to generate image" });
-      }
+      // Use OpenAI gpt-image-1 to generate image
+      const { generateImageBuffer } = await import("./replit_integrations/image/client");
+      
+      const imageBuffer = await generateImageBuffer(imagePrompt, "1024x1024");
+      const imageBase64 = imageBuffer.toString("base64");
 
       // Save image to the shot
       const updatedShot = await storage.updateShot(shot.id, {
-        imageBase64: imagePart.inlineData.data,
+        imageBase64: imageBase64,
       });
 
       res.json(updatedShot);
@@ -1029,47 +1014,31 @@ ${shot.atmosphere ? `氛围：${shot.atmosphere}` : ""}
         return res.status(400).json({ error: "No shots to generate images for" });
       }
 
-      const { GoogleGenAI, Modality } = await import("@google/genai");
-      const ai = new GoogleGenAI({
-        apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-      });
-
+      const { generateImageBuffer } = await import("./replit_integrations/image/client");
       const results = [];
       
       for (const shot of shots) {
         try {
-          const imagePrompt = `电影分镜画面：
-场景：${scene.title || ""}
-地点：${scene.location || ""}
-时间：${scene.timeOfDay || ""}
+          const imagePrompt = `Film storyboard frame, cinematic style:
+Scene: ${scene.title || ""}
+Location: ${scene.location || ""}
+Time: ${scene.timeOfDay || ""}
 
-镜头${shot.shotNumber}：${shot.description}
-景别：${shot.shotType || "中景"}
-角度：${shot.cameraAngle || "平视"}
-运动：${shot.cameraMovement || "固定"}
-${shot.atmosphere ? `氛围：${shot.atmosphere}` : ""}
+Shot ${shot.shotNumber}: ${shot.description}
+Shot type: ${shot.shotType || "medium shot"}
+Camera angle: ${shot.cameraAngle || "eye level"}
+Camera movement: ${shot.cameraMovement || "static"}
+${shot.atmosphere ? `Atmosphere: ${shot.atmosphere}` : ""}
 
-要求：电影画面风格，专业电影摄影构图，高质量，电影感，16:9画幅`;
+Requirements: Professional film cinematography, cinematic lighting, high quality, movie style, 16:9 aspect ratio`;
 
-          const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash-exp-image-generation",
-            contents: imagePrompt,
-            config: {
-              responseModalities: [Modality.TEXT, Modality.IMAGE],
-            },
+          const imageBuffer = await generateImageBuffer(imagePrompt, "1024x1024");
+          const imageBase64 = imageBuffer.toString("base64");
+
+          await storage.updateShot(shot.id, {
+            imageBase64: imageBase64,
           });
-
-          const candidate = response.candidates?.[0];
-          const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
-
-          if (imagePart?.inlineData?.data) {
-            const updatedShot = await storage.updateShot(shot.id, {
-              imageBase64: imagePart.inlineData.data,
-            });
-            results.push({ id: shot.id, success: true });
-          } else {
-            results.push({ id: shot.id, success: false, error: "No image data" });
-          }
+          results.push({ id: shot.id, success: true });
         } catch (err) {
           console.error(`Error generating image for shot ${shot.id}:`, err);
           results.push({ id: shot.id, success: false, error: "Generation failed" });
