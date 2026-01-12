@@ -349,6 +349,128 @@ export const directorStyleInfo: Record<DirectorStyle, { name: string; nameCN: st
   custom: { name: "Custom", nameCN: "自定义", traits: "用户自定义风格", works: "用户指定" },
 };
 
+// Director detailed storyboarding rules
+export const directorStyleRules: Record<DirectorStyle, {
+  shotPreferences: string;
+  cameraWork: string;
+  pacing: string;
+  composition: string;
+  signatures: string;
+}> = {
+  quentin_tarantino: {
+    shotPreferences: "偏好中景对话镜头、脚部特写、后备箱仰拍视角、墨西哥对峙式多人构图",
+    cameraWork: "大量使用推轨跟拍、急速变焦（crash zoom）揭示、横摇对切",
+    pacing: "对话场景节奏缓慢，暴力场景突然加速，使用慢动作强化关键时刻",
+    composition: "低角度拍摄赋予角色力量感，对称构图用于对峙场景",
+    signatures: "章节式叙事、突然的暴力爆发、长段对话后的动作高潮"
+  },
+  steven_spielberg: {
+    shotPreferences: "长镜头调度（oner）、'斯皮尔伯格脸'推镜（角色凝视画外的反应镜头）、仰拍英雄时刻",
+    cameraWork: "平滑推轨、缓慢推近面部、前景/背景深度调度",
+    pacing: "情感场景用较长镜头酝酿，高潮时用交叉剪辑加速",
+    composition: "光束穿透黑暗、剪影逆光、人物置于宏大场景前",
+    signatures: "孩童视角仰拍、家庭团聚主题、窗户/门框构图"
+  },
+  christopher_nolan: {
+    shotPreferences: "IMAX级宏大远景、精确的平行剪辑、实拍偏好（少用CG）",
+    cameraWork: "手持摄影营造混乱感、稳定跟拍用于清晰叙事",
+    pacing: "多线叙事交叉剪辑、时间操控式剪辑节奏",
+    composition: "中心对称构图、冷色调金属质感、极简环境",
+    signatures: "时间主题、倒叙或非线性、关键信息视觉隐藏"
+  },
+  zhang_yimou: {
+    shotPreferences: "大远景群像调度、对称俯拍、纹理特写（布料、武器、自然元素）",
+    cameraWork: "稳定横移跟随、缓慢升降机运动、静态大师镜头",
+    pacing: "慢节奏铺垫、武戏快速剪辑、情绪高潮延长",
+    composition: "强烈色彩编码（红=激情、蓝=忧郁、白=纯净）、对称构图、服装色块分区",
+    signatures: "群演编排如图案、飘动纱幔作为画面元素、自然光与人工光对比"
+  },
+  bela_tarr: {
+    shotPreferences: "超长镜头（单镜可达5-10分钟）、水平线构图、远距离观察式构图",
+    cameraWork: "缓慢横向跟拍人物行走、极少剪辑、摄影机如沉默观察者",
+    pacing: "极度缓慢、让观众感受时间流逝、动作边缘剪辑",
+    composition: "地平线水平分割、灰度影像、雨水/风/泥泞作为视觉元素",
+    signatures: "存在主义凝视、日常动作的仪式化、环境声设计"
+  },
+  bi_gan: {
+    shotPreferences: "梦幻长镜头、横向漂移式运动、镜面反射揭示",
+    cameraWork: "手持跟拍穿越空间、360度环绕、时空跳跃式长镜头",
+    pacing: "诗意节奏、现实与梦境交织、情绪驱动而非情节驱动",
+    composition: "霓虹光晕、雾气层叠、水面倒影",
+    signatures: "3D长镜头、诗歌画外音、时间折叠叙事"
+  },
+  wong_kar_wai: {
+    shotPreferences: "肩部近景、倾斜走廊视角、抽帧（6-12fps跳帧效果）",
+    cameraWork: "手持摄影创造亲密感、慢动作强化情绪、快门拖影",
+    pacing: "拉长的凝视时刻、情绪重于情节、省略式叙事",
+    composition: "霓虹灯剪影、烟雾弥漫、框中框（门框、镜子）",
+    signatures: "重复音乐主题、画外音独白、时间跨度字幕"
+  },
+  wes_anderson: {
+    shotPreferences: "严格对称构图、正面平视角度、垂直俯拍插入",
+    cameraWork: "平移横摇（pan）、精确停位、缩放揭示",
+    pacing: "章节卡分隔、均匀节奏、喜剧时机精确",
+    composition: "糖果色调调色板、居中构图、平面化空间感",
+    signatures: "书信/报纸特写插入、微缩模型感、演员直视镜头"
+  },
+  david_fincher: {
+    shotPreferences: "精确锁定机位微调、法医级细节特写、冷色调低对比度",
+    cameraWork: "CGI辅助不可能机位、缓慢推近、隐形剪辑",
+    pacing: "紧凑高效、快速交叉溶解省略时间、信息密集",
+    composition: "绿/青冷色调、暗部细节保留、几何构图",
+    signatures: "开场精心设计的信用序列、科技/数字界面、心理悬疑"
+  },
+  alfonso_cuaron: {
+    shotPreferences: "沉浸式长镜头（oner）、动机驱动的摄影机运动、深焦环境叙事",
+    cameraWork: "360度手持环绕、跟拍穿越复杂空间、自然光优先",
+    pacing: "呼吸式节奏、让观众与角色同步体验时间",
+    composition: "深度调度（前景动作+背景叙事）、自然主义光影对比",
+    signatures: "单镜头动作场景、角色在真实空间中移动、声音设计沉浸感"
+  },
+  denis_villeneuve: {
+    shotPreferences: "纪念碑式大远景配中心小人物、缓慢推进、极简对白间隙",
+    cameraWork: "缓慢推轨靠近、静态凝视、航拍宏观",
+    pacing: "压迫性缓慢、沉默比对话多、氛围营造优先",
+    composition: "明暗对比（chiaroscuro）、雾气光束、负空间压迫",
+    signatures: "低频音效设计、外星/未来环境、存在主义主题"
+  },
+  park_chan_wook: {
+    shotPreferences: "巴洛克式对称构图、急速倾斜揭示（whip-tilt）、分屈光镜（split diopter）",
+    cameraWork: "精心编排的复杂运动、镜像对称机位、垂直升降",
+    pacing: "精致暴力的慢动作、复仇叙事的层层揭示",
+    composition: "红绿色彩对比张力、对称镜像角色、华丽美术设计",
+    signatures: "复仇三部曲式叙事、精心设计的暴力美学、章回体结构"
+  },
+  hirokazu_koreeda: {
+    shotPreferences: "平视静态中景、自然光室内、日常细节枕头镜头（pillow shots）",
+    cameraWork: "固定机位观察、极少运动、不打扰式拍摄",
+    pacing: "生活化节奏、情感慢慢渗透、克制的高潮",
+    composition: "餐桌对话构图、窗户自然光、家庭空间",
+    signatures: "家庭题材、食物场景、孩童视角"
+  },
+  hou_hsiao_hsien: {
+    shotPreferences: "远距离固定远景、负空间前景遮挡、环境声桥接",
+    cameraWork: "几乎不动的摄影机、远距离观察、自然发生式调度",
+    pacing: "极度留白、动作边缘剪辑、省略式叙事",
+    composition: "前景遮挡物（门框、树枝）、深远空间感、自然光",
+    signatures: "历史题材、台湾在地性、沉默多于对话"
+  },
+  tsai_ming_liang: {
+    shotPreferences: "超长静态镜头（单镜可5分钟以上）、建筑框架孤立人物、只用现场声",
+    cameraWork: "完全静止凝视、不打扰观察、时间即内容",
+    pacing: "挑战观众耐心的缓慢、硬切转场、无过渡",
+    composition: "都市疏离空间、雨水/水元素、人物渺小于空间",
+    signatures: "极简对白、身体性表演、城市异化主题"
+  },
+  custom: {
+    shotPreferences: "根据用户描述确定",
+    cameraWork: "根据用户描述确定",
+    pacing: "根据用户描述确定",
+    composition: "根据用户描述确定",
+    signatures: "根据用户描述确定"
+  }
+};
+
 // Visual style info
 export const visualStyleInfo: Record<VisualStyle, { name: string; nameCN: string }> = {
   realistic: { name: "Realistic", nameCN: "写实风格" },

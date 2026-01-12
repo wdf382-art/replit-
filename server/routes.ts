@@ -39,6 +39,7 @@ import {
   insertProductionNotesSchema,
   insertCallSheetSchema,
   directorStyleInfo,
+  directorStyleRules,
   visualStyleInfo,
   shotTypeInfo,
   cameraAngleInfo,
@@ -939,6 +940,29 @@ export async function registerRoutes(
         ? `自定义画面风格：${customVisualStyle}`
         : `${visual!.nameCN}`;
 
+      const directorRules = !isCustomDirector 
+        ? directorStyleRules[directorStyle as DirectorStyle]
+        : null;
+
+      const directorRulesSection = isCustomDirector 
+        ? `\n## 导演专属分镜策略\n根据用户自定义风格：${customDirectorStyle}\n请据此设计符合该风格的镜头语言。`
+        : `\n## 导演专属分镜策略（${director!.nameCN}）
+
+### 景别与镜头偏好
+${directorRules!.shotPreferences}
+
+### 摄影机运动
+${directorRules!.cameraWork}
+
+### 节奏控制
+${directorRules!.pacing}
+
+### 构图风格
+${directorRules!.composition}
+
+### 标志性技法
+${directorRules!.signatures}`;
+
       const sceneContentLength = (scene.description?.length || 0) + (scene.dialogue?.length || 0) + (scene.action?.length || 0) + ((scene as any).scriptContent?.length || 0);
       const estimatedMinutes = Math.max(0.5, sceneContentLength / 300);
       const estimatedSeconds = Math.round(estimatedMinutes * 60);
@@ -983,8 +1007,9 @@ export async function registerRoutes(
 - 承：展开叙事，推进情节
 - 转：情绪或事件转折点
 - 合：场景收尾，留有余韵
+${directorRulesSection}
 
-请根据场次内容设计合适数量的镜头，体现导演风格特点，严格遵守以上分镜规则。
+请根据场次内容设计合适数量的镜头，严格遵守通用分镜规则的同时，重点体现上述导演专属分镜策略。
 
 返回JSON格式：
 {
