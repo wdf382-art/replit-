@@ -12,6 +12,8 @@ import {
   callSheets,
   scriptVersions,
   shotVersions,
+  scriptAnalysisGlobal,
+  performanceGuidesV2,
 } from "@shared/schema";
 import { eq, and, desc, asc } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -40,6 +42,10 @@ import type {
   InsertScriptVersion,
   ShotVersion,
   InsertShotVersion,
+  ScriptAnalysisGlobal,
+  InsertScriptAnalysisGlobal,
+  PerformanceGuideV2,
+  InsertPerformanceGuideV2,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -100,6 +106,15 @@ export interface IStorage {
   getShotVersions(shotId: string): Promise<ShotVersion[]>;
   createShotVersion(version: InsertShotVersion): Promise<ShotVersion>;
   restoreShotVersion(shotId: string, versionId: string): Promise<Shot | undefined>;
+
+  getScriptAnalysisGlobal(projectId: string): Promise<ScriptAnalysisGlobal | undefined>;
+  createScriptAnalysisGlobal(analysis: InsertScriptAnalysisGlobal): Promise<ScriptAnalysisGlobal>;
+  updateScriptAnalysisGlobal(id: string, analysis: Partial<InsertScriptAnalysisGlobal>): Promise<ScriptAnalysisGlobal | undefined>;
+
+  getPerformanceGuideV2(sceneId: string): Promise<PerformanceGuideV2 | undefined>;
+  getPerformanceGuidesV2ByProject(projectId: string): Promise<PerformanceGuideV2[]>;
+  createPerformanceGuideV2(guide: InsertPerformanceGuideV2): Promise<PerformanceGuideV2>;
+  updatePerformanceGuideV2(id: string, guide: Partial<InsertPerformanceGuideV2>): Promise<PerformanceGuideV2 | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -491,6 +506,52 @@ export class DatabaseStorage implements IStorage {
         version: currentVersion + 1,
       })
       .where(eq(shots.id, shotId))
+      .returning();
+    return result[0];
+  }
+
+  async getScriptAnalysisGlobal(projectId: string): Promise<ScriptAnalysisGlobal | undefined> {
+    const result = await db.select().from(scriptAnalysisGlobal)
+      .where(eq(scriptAnalysisGlobal.projectId, projectId))
+      .orderBy(desc(scriptAnalysisGlobal.version));
+    return result[0];
+  }
+
+  async createScriptAnalysisGlobal(insertAnalysis: InsertScriptAnalysisGlobal): Promise<ScriptAnalysisGlobal> {
+    const result = await db.insert(scriptAnalysisGlobal).values(insertAnalysis).returning();
+    return result[0];
+  }
+
+  async updateScriptAnalysisGlobal(id: string, updates: Partial<InsertScriptAnalysisGlobal>): Promise<ScriptAnalysisGlobal | undefined> {
+    const result = await db.update(scriptAnalysisGlobal)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(scriptAnalysisGlobal.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getPerformanceGuideV2(sceneId: string): Promise<PerformanceGuideV2 | undefined> {
+    const result = await db.select().from(performanceGuidesV2)
+      .where(eq(performanceGuidesV2.sceneId, sceneId))
+      .orderBy(desc(performanceGuidesV2.version));
+    return result[0];
+  }
+
+  async getPerformanceGuidesV2ByProject(projectId: string): Promise<PerformanceGuideV2[]> {
+    return db.select().from(performanceGuidesV2)
+      .where(eq(performanceGuidesV2.projectId, projectId))
+      .orderBy(desc(performanceGuidesV2.createdAt));
+  }
+
+  async createPerformanceGuideV2(insertGuide: InsertPerformanceGuideV2): Promise<PerformanceGuideV2> {
+    const result = await db.insert(performanceGuidesV2).values(insertGuide).returning();
+    return result[0];
+  }
+
+  async updatePerformanceGuideV2(id: string, updates: Partial<InsertPerformanceGuideV2>): Promise<PerformanceGuideV2 | undefined> {
+    const result = await db.update(performanceGuidesV2)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(performanceGuidesV2.id, id))
       .returning();
     return result[0];
   }
@@ -1009,6 +1070,34 @@ export class MemStorage implements IStorage {
     };
     this.shots.set(shotId, updated);
     return updated;
+  }
+
+  async getScriptAnalysisGlobal(_projectId: string): Promise<ScriptAnalysisGlobal | undefined> {
+    return undefined;
+  }
+
+  async createScriptAnalysisGlobal(_analysis: InsertScriptAnalysisGlobal): Promise<ScriptAnalysisGlobal> {
+    throw new Error("MemStorage does not support scriptAnalysisGlobal");
+  }
+
+  async updateScriptAnalysisGlobal(_id: string, _analysis: Partial<InsertScriptAnalysisGlobal>): Promise<ScriptAnalysisGlobal | undefined> {
+    return undefined;
+  }
+
+  async getPerformanceGuideV2(_sceneId: string): Promise<PerformanceGuideV2 | undefined> {
+    return undefined;
+  }
+
+  async getPerformanceGuidesV2ByProject(_projectId: string): Promise<PerformanceGuideV2[]> {
+    return [];
+  }
+
+  async createPerformanceGuideV2(_guide: InsertPerformanceGuideV2): Promise<PerformanceGuideV2> {
+    throw new Error("MemStorage does not support performanceGuidesV2");
+  }
+
+  async updatePerformanceGuideV2(_id: string, _guide: Partial<InsertPerformanceGuideV2>): Promise<PerformanceGuideV2 | undefined> {
+    return undefined;
   }
 }
 

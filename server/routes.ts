@@ -45,6 +45,8 @@ import {
   shotTypeInfo,
   cameraAngleInfo,
   cameraMovementInfo,
+  PerformanceGuideV2GenerationSchema,
+  ScriptAnalysisGlobalGenerationSchema,
   type DirectorStyle,
   type VisualStyle,
   type AspectRatio,
@@ -112,6 +114,16 @@ const defaultFallbacks = {
   shots: { shots: [] },
   performance: { emotionBefore: "", emotionDuring: "", emotionAfter: "", directorNotes: "", performanceOptions: [], dialogueSuggestions: "", actionSuggestions: "" },
   production: { notes: [] },
+  scriptAnalysisGlobal: { characterArcs: [], relationships: [], emotionMap: [], keyScenes: [], overallTheme: "" },
+  performanceGuideV2: { 
+    sceneHook: { hookDescription: "", hookType: "", hookPosition: "", hookTrigger: "", emotionCurve: { opening: 50, buildup: 50, climax: 50, ending: 50 }, beforeAfterContrast: { before: "", during: "", after: "" } },
+    sceneDiagnosis: { isFlatScene: false, flatReasons: [], solutions: [] },
+    emotionalChain: { previousScene: null, currentScene: { emotionalStartpoint: "", emotionalEndpoint: "", sceneObjective: "" }, nextScene: null, directorTip: "" },
+    characterPerformances: [],
+    scriptSuggestions: { issues: [], improvements: [] },
+    propPerformance: [],
+    costumeProgression: [],
+  },
 };
 
 // Standalone function to extract scene content from script
@@ -1905,6 +1917,343 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
     } catch (error) {
       console.error("Error analyzing project:", error);
       res.status(500).json({ error: "Failed to analyze project" });
+    }
+  });
+
+  // ============================================
+  // 全剧分析 API (Script Analysis Global)
+  // ============================================
+
+  app.get("/api/script-analysis-global/:projectId", async (req, res) => {
+    try {
+      const analysis = await storage.getScriptAnalysisGlobal(req.params.projectId);
+      res.json(analysis || null);
+    } catch (error) {
+      console.error("Error fetching script analysis global:", error);
+      res.status(500).json({ error: "获取全剧分析失败" });
+    }
+  });
+
+  app.post("/api/script-analysis-global/generate", async (req, res) => {
+    try {
+      const { projectId } = req.body as { projectId: string };
+
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "项目不存在" });
+      }
+
+      const scripts = await storage.getScripts(projectId);
+      const activeScript = scripts.find(s => s.isActive);
+      if (!activeScript) {
+        return res.status(400).json({ error: "请先上传剧本" });
+      }
+
+      const scenes = await storage.getScenes(projectId);
+      const characters = await storage.getCharacters(projectId);
+
+      const prompt = `你是一位资深电影导演和剧本分析师。请对以下完整剧本进行深度分析，为后续的表演指导提供基础。
+
+【项目信息】
+标题：${project.title}
+类型：${project.type}
+描述：${project.description || "无"}
+
+【完整剧本】
+${activeScript.content}
+
+【已识别的场次】
+${scenes.map(s => `第${s.sceneNumber}场 - ${s.title} | 地点：${s.location || "未指定"} | 时间：${s.timeOfDay || "未指定"}`).join("\n")}
+
+【已识别的角色】
+${characters.map(c => `${c.name}: ${c.description || "暂无描述"}`).join("\n") || "暂无角色信息"}
+
+请分析并返回JSON格式数据，包含：
+
+1. characterArcs - 每个角色的人物弧光分析
+   - characterId: 角色ID（如果已知）或"unknown"
+   - characterName: 角色名
+   - arcDescription: 完整的人物弧光描述
+   - startState: 故事开始时的状态
+   - endState: 故事结束时的状态
+   - turningPoints: 关键转折点（sceneNumber + description）
+   - emotionByScene: 每场的情绪状态和强度(0-100)
+
+2. relationships - 角色间的关系网络
+   - character1Name, character2Name
+   - relationshipType: 关系类型
+   - conflictPoints: 冲突点列表
+   - evolutionDescription: 关系演变描述
+
+3. emotionMap - 全剧情绪地图
+   - 每场的整体情绪、强度、是否为关键场次
+
+4. keyScenes - 关键场次编号列表
+
+5. overallTheme - 全剧主题总结
+
+返回JSON格式：
+{
+  "characterArcs": [...],
+  "relationships": [...],
+  "emotionMap": [...],
+  "keyScenes": [...],
+  "overallTheme": "..."
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 8192,
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const result = safeParseJSON(content, ScriptAnalysisGlobalGenerationSchema, "scriptAnalysisGlobal");
+
+      // Check if analysis already exists
+      const existingAnalysis = await storage.getScriptAnalysisGlobal(projectId);
+      
+      let analysis;
+      if (existingAnalysis) {
+        analysis = await storage.updateScriptAnalysisGlobal(existingAnalysis.id, {
+          characterArcs: result.characterArcs.map(arc => ({
+            ...arc,
+            characterId: characters.find(c => c.name === arc.characterName)?.id || arc.characterId,
+          })),
+          relationships: result.relationships.map(rel => ({
+            ...rel,
+            character1Id: characters.find(c => c.name === rel.character1Name)?.id || "unknown",
+            character2Id: characters.find(c => c.name === rel.character2Name)?.id || "unknown",
+          })),
+          emotionMap: result.emotionMap.map(em => ({
+            ...em,
+            sceneId: scenes.find(s => s.sceneNumber === em.sceneNumber)?.id || "unknown",
+          })),
+          keyScenes: result.keyScenes,
+          overallTheme: result.overallTheme,
+          version: (existingAnalysis.version || 0) + 1,
+        });
+      } else {
+        analysis = await storage.createScriptAnalysisGlobal({
+          projectId,
+          characterArcs: result.characterArcs.map(arc => ({
+            ...arc,
+            characterId: characters.find(c => c.name === arc.characterName)?.id || arc.characterId,
+          })),
+          relationships: result.relationships.map(rel => ({
+            ...rel,
+            character1Id: characters.find(c => c.name === rel.character1Name)?.id || "unknown",
+            character2Id: characters.find(c => c.name === rel.character2Name)?.id || "unknown",
+          })),
+          emotionMap: result.emotionMap.map(em => ({
+            ...em,
+            sceneId: scenes.find(s => s.sceneNumber === em.sceneNumber)?.id || "unknown",
+          })),
+          keyScenes: result.keyScenes,
+          overallTheme: result.overallTheme,
+        });
+      }
+
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error generating script analysis global:", error);
+      res.status(500).json({ error: "生成全剧分析失败" });
+    }
+  });
+
+  // ============================================
+  // 表演指导V2 API (Performance Guides V2)
+  // ============================================
+
+  app.get("/api/performance-guides-v2/:sceneId", async (req, res) => {
+    try {
+      const guide = await storage.getPerformanceGuideV2(req.params.sceneId);
+      res.json(guide || null);
+    } catch (error) {
+      console.error("Error fetching performance guide v2:", error);
+      res.status(500).json({ error: "获取表演指导失败" });
+    }
+  });
+
+  app.get("/api/performance-guides-v2", async (req, res) => {
+    try {
+      const projectId = req.query.projectId as string;
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required" });
+      }
+      const guides = await storage.getPerformanceGuidesV2ByProject(projectId);
+      res.json(guides);
+    } catch (error) {
+      console.error("Error fetching performance guides v2:", error);
+      res.status(500).json({ error: "获取表演指导列表失败" });
+    }
+  });
+
+  app.post("/api/performance-guides-v2/generate", async (req, res) => {
+    try {
+      const { sceneId } = req.body as { sceneId: string };
+
+      const scene = await storage.getScene(sceneId);
+      if (!scene) {
+        return res.status(404).json({ error: "场次不存在" });
+      }
+
+      const project = await storage.getProject(scene.projectId);
+      if (!project) {
+        return res.status(404).json({ error: "项目不存在" });
+      }
+
+      // Get full script for context
+      const scripts = await storage.getScripts(scene.projectId);
+      const activeScript = scripts.find(s => s.isActive);
+
+      // Get all scenes for prev/next context
+      const allScenes = await storage.getScenes(scene.projectId);
+      const sortedScenes = allScenes.sort((a, b) => a.sceneNumber - b.sceneNumber);
+      const currentIndex = sortedScenes.findIndex(s => s.id === sceneId);
+      const prevScene = currentIndex > 0 ? sortedScenes[currentIndex - 1] : null;
+      const nextScene = currentIndex < sortedScenes.length - 1 ? sortedScenes[currentIndex + 1] : null;
+
+      // Get characters
+      const characters = await storage.getCharacters(scene.projectId);
+
+      // Get global analysis if available
+      const globalAnalysis = await storage.getScriptAnalysisGlobal(scene.projectId);
+
+      const prompt = `你是一位资深电影导演，专门提供详细的表演指导。现在需要为一场戏设计完整的表演方案。
+
+【重要】你必须先通读完整剧本，理解整个故事脉络，再来设计这一场的表演。
+
+【完整剧本】
+${activeScript?.content || "剧本内容未上传"}
+
+【全剧分析参考】
+${globalAnalysis ? `
+主题：${globalAnalysis.overallTheme || "未分析"}
+关键场次：第${(globalAnalysis.keyScenes || []).join("、")}场
+角色弧光：${(globalAnalysis.characterArcs || []).map(a => `${a.characterName}: ${a.arcDescription}`).join("\n")}
+` : "暂无全剧分析，请根据剧本内容自行分析"}
+
+【上一场】
+${prevScene ? `
+第${prevScene.sceneNumber}场 - ${prevScene.title}
+地点：${prevScene.location || "未指定"} | 时间：${prevScene.timeOfDay || "未指定"}
+内容：${prevScene.scriptContent || prevScene.description || ""}
+对白：${prevScene.dialogue || "无"}
+动作：${prevScene.action || "无"}
+` : "这是第一场，没有上一场"}
+
+【本场内容】
+第${scene.sceneNumber}场 - ${scene.title}
+地点：${scene.location || "未指定"} | 时间：${scene.timeOfDay || "未指定"}
+描述：${scene.description || ""}
+原始剧本：${scene.scriptContent || ""}
+对白：${scene.dialogue || "无"}
+动作：${scene.action || "无"}
+
+【下一场】
+${nextScene ? `
+第${nextScene.sceneNumber}场 - ${nextScene.title}
+地点：${nextScene.location || "未指定"} | 时间：${nextScene.timeOfDay || "未指定"}
+内容：${nextScene.scriptContent || nextScene.description || ""}
+` : "这是最后一场，没有下一场"}
+
+【本场涉及角色】
+${characters.map(c => `${c.name}: ${c.description || "暂无描述"}`).join("\n") || "请从剧本中识别角色"}
+
+请生成完整的表演指导，包含以下内容：
+
+1. sceneHook - 本场戏点分析
+   - hookDescription: 核心戏点是什么
+   - hookType: 类型(情感爆发/悬念揭晓/关系逆转/真相大白/冲突升级/情感铺垫)
+   - hookPosition: 位置(开场/中段/高潮/结尾)
+   - hookTrigger: 触发点(具体台词或动作)
+   - emotionCurve: { opening: 0-100, buildup: 0-100, climax: 0-100, ending: 0-100 }
+   - beforeAfterContrast: { before, during, after }
+
+2. sceneDiagnosis - 场次质量诊断
+   - isFlatScene: 是否存在"平"的风险
+   - flatReasons: 如果"平"，原因是什么
+   - solutions: 2-3个破"平"方案，可以是任何修改：改台词、改场景、改动作、删戏、加戏等，无限制
+
+3. emotionalChain - 情绪承接链
+   - previousScene: { sceneNumber, emotionalEndpoint, keyEvent } 或 null
+   - currentScene: { emotionalStartpoint, emotionalEndpoint, sceneObjective }
+   - nextScene: { sceneNumber, emotionalStartpoint, transitionNote } 或 null
+   - directorTip: 给导演的开拍提示
+
+4. characterPerformances - 每个角色的详细表演指导
+   - characterId, characterName
+   - positioning: { currentAppearance: "第X/共Y场", characterArc, currentPhase, sceneSignificance }
+   - performanceLayers: { surface: 表层表现, middle: 中层情绪, core: 核心驱动 }
+   - directorScript: 【核心！】导演讲戏稿，用第二人称"你"的口吻，分段落(开场/中段/戏点/结尾)，每段都要非常详细具体，可以直接用来和演员沟通
+   - actionDesign: 具体动作设计 [{ timing, action, meaning }]
+   - subtext: 潜台词对照表 [{ originalLine, realMeaning }]
+   - interactionNotes: 对手戏处理 [{ withCharacter, eyeContact, physicalDistance, bodyContact }]
+
+5. scriptSuggestions - 剧本优化建议（如果原剧本有问题）
+   - issues: [{ type, originalContent, problem }]
+   - improvements: [{ title, original, suggested, reason }]
+   - 注意：可以建议任何修改，包括删戏、改台词、改场景等
+
+6. propPerformance - 道具表演关联
+   - [{ prop, usage, emotionalMeaning }]
+
+7. costumeProgression - 服装状态变化
+   - [{ timing, state, meaning }]
+
+返回JSON格式。`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 8192,
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const result = safeParseJSON(content, PerformanceGuideV2GenerationSchema, "performanceGuideV2");
+
+      // Map character names to IDs
+      const mappedPerformances = result.characterPerformances.map(perf => ({
+        ...perf,
+        characterId: characters.find(c => c.name === perf.characterName)?.id || "unknown",
+      }));
+
+      // Check if guide already exists for this scene
+      const existingGuide = await storage.getPerformanceGuideV2(sceneId);
+
+      let guide;
+      if (existingGuide) {
+        guide = await storage.updatePerformanceGuideV2(existingGuide.id, {
+          sceneHook: result.sceneHook,
+          sceneDiagnosis: result.sceneDiagnosis,
+          emotionalChain: result.emotionalChain,
+          characterPerformances: mappedPerformances,
+          scriptSuggestions: result.scriptSuggestions,
+          propPerformance: result.propPerformance,
+          costumeProgression: result.costumeProgression,
+          version: (existingGuide.version || 0) + 1,
+        });
+      } else {
+        guide = await storage.createPerformanceGuideV2({
+          sceneId,
+          projectId: scene.projectId,
+          sceneHook: result.sceneHook,
+          sceneDiagnosis: result.sceneDiagnosis,
+          emotionalChain: result.emotionalChain,
+          characterPerformances: mappedPerformances,
+          scriptSuggestions: result.scriptSuggestions,
+          propPerformance: result.propPerformance,
+          costumeProgression: result.costumeProgression,
+        });
+      }
+
+      res.json(guide);
+    } catch (error) {
+      console.error("Error generating performance guide v2:", error);
+      res.status(500).json({ error: "生成表演指导失败" });
     }
   });
 

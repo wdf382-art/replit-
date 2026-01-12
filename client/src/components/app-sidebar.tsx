@@ -44,14 +44,14 @@ const workflowItems = [
     icon: FileText,
   },
   {
-    title: "智能分镜",
-    url: "/storyboard",
-    icon: Image,
-  },
-  {
     title: "表演指导",
     url: "/performance",
     icon: Drama,
+  },
+  {
+    title: "智能分镜",
+    url: "/storyboard",
+    icon: Image,
   },
   {
     title: "服化道提示",

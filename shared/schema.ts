@@ -331,6 +331,350 @@ export const insertProductionNotesSchema = createInsertSchema(productionNotes).o
 export type InsertProductionNotes = z.infer<typeof insertProductionNotesSchema>;
 export type ProductionNotes = typeof productionNotes.$inferSelect;
 
+// ============================================
+// 全剧分析表 (Script Analysis Global)
+// 存储完整剧本的人物弧光、情绪地图、关系网络
+// ============================================
+
+export interface CharacterArcData {
+  characterId: string;
+  characterName: string;
+  arcDescription: string;
+  startState: string;
+  endState: string;
+  turningPoints: Array<{
+    sceneNumber: number;
+    description: string;
+  }>;
+  emotionByScene: Array<{
+    sceneNumber: number;
+    emotion: string;
+    intensity: number;
+  }>;
+}
+
+export interface RelationshipData {
+  character1Id: string;
+  character1Name: string;
+  character2Id: string;
+  character2Name: string;
+  relationshipType: string;
+  conflictPoints: string[];
+  evolutionDescription: string;
+}
+
+export interface SceneEmotionMapData {
+  sceneNumber: number;
+  sceneId: string;
+  overallEmotion: string;
+  intensity: number;
+  isKeyScene: boolean;
+  keySceneType?: string;
+}
+
+export const scriptAnalysisGlobal = pgTable("script_analysis_global", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  characterArcs: jsonb("character_arcs").$type<CharacterArcData[]>(),
+  relationships: jsonb("relationships").$type<RelationshipData[]>(),
+  emotionMap: jsonb("emotion_map").$type<SceneEmotionMapData[]>(),
+  keyScenes: jsonb("key_scenes").$type<number[]>(),
+  overallTheme: text("overall_theme"),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertScriptAnalysisGlobalSchema = createInsertSchema(scriptAnalysisGlobal).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertScriptAnalysisGlobal = z.infer<typeof insertScriptAnalysisGlobalSchema>;
+export type ScriptAnalysisGlobal = typeof scriptAnalysisGlobal.$inferSelect;
+
+// ============================================
+// 表演指导V2表 (Performance Guides V2)
+// 增强版单场表演指导，包含戏点、诊断、导演讲戏稿等
+// ============================================
+
+export interface SceneHookData {
+  hookDescription: string;
+  hookType: string;
+  hookPosition: string;
+  hookTrigger: string;
+  emotionCurve: {
+    opening: number;
+    buildup: number;
+    climax: number;
+    ending: number;
+  };
+  beforeAfterContrast: {
+    before: string;
+    during: string;
+    after: string;
+  };
+}
+
+export interface SceneDiagnosisData {
+  isFlatScene: boolean;
+  flatReasons: string[];
+  solutions: Array<{
+    title: string;
+    description: string;
+    implementationSteps?: string[];
+  }>;
+}
+
+export interface EmotionalChainData {
+  previousScene: {
+    sceneNumber: number;
+    emotionalEndpoint: string;
+    keyEvent: string;
+  } | null;
+  currentScene: {
+    emotionalStartpoint: string;
+    emotionalEndpoint: string;
+    sceneObjective: string;
+  };
+  nextScene: {
+    sceneNumber: number;
+    emotionalStartpoint: string;
+    transitionNote: string;
+  } | null;
+  directorTip: string;
+}
+
+export interface CharacterPerformanceData {
+  characterId: string;
+  characterName: string;
+  positioning: {
+    currentAppearance: string;
+    characterArc: string;
+    currentPhase: string;
+    sceneSignificance: string;
+  };
+  performanceLayers: {
+    surface: string;
+    middle: string;
+    core: string;
+  };
+  directorScript: Array<{
+    segment: string;
+    content: string;
+  }>;
+  actionDesign: Array<{
+    timing: string;
+    action: string;
+    meaning: string;
+  }>;
+  subtext: Array<{
+    originalLine: string;
+    realMeaning: string;
+  }>;
+  interactionNotes: Array<{
+    withCharacter: string;
+    eyeContact: string;
+    physicalDistance: string;
+    bodyContact: string;
+  }>;
+}
+
+export interface ScriptSuggestionData {
+  issues: Array<{
+    type: string;
+    originalContent: string;
+    problem: string;
+  }>;
+  improvements: Array<{
+    title: string;
+    original: string;
+    suggested: string;
+    reason: string;
+  }>;
+}
+
+export interface PropPerformanceData {
+  prop: string;
+  usage: string;
+  emotionalMeaning: string;
+}
+
+export interface CostumeProgressionData {
+  timing: string;
+  state: string;
+  meaning: string;
+}
+
+export const performanceGuidesV2 = pgTable("performance_guides_v2", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sceneId: varchar("scene_id").notNull().references(() => scenes.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  sceneHook: jsonb("scene_hook").$type<SceneHookData>(),
+  sceneDiagnosis: jsonb("scene_diagnosis").$type<SceneDiagnosisData>(),
+  emotionalChain: jsonb("emotional_chain").$type<EmotionalChainData>(),
+  characterPerformances: jsonb("character_performances").$type<CharacterPerformanceData[]>(),
+  scriptSuggestions: jsonb("script_suggestions").$type<ScriptSuggestionData>(),
+  propPerformance: jsonb("prop_performance").$type<PropPerformanceData[]>(),
+  costumeProgression: jsonb("costume_progression").$type<CostumeProgressionData[]>(),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertPerformanceGuideV2Schema = createInsertSchema(performanceGuidesV2).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPerformanceGuideV2 = z.infer<typeof insertPerformanceGuideV2Schema>;
+export type PerformanceGuideV2 = typeof performanceGuidesV2.$inferSelect;
+
+// AI生成表演指导时使用的Zod验证schema
+export const PerformanceGuideV2GenerationSchema = z.object({
+  sceneHook: z.object({
+    hookDescription: z.string(),
+    hookType: z.string(),
+    hookPosition: z.string(),
+    hookTrigger: z.string(),
+    emotionCurve: z.object({
+      opening: z.number(),
+      buildup: z.number(),
+      climax: z.number(),
+      ending: z.number(),
+    }),
+    beforeAfterContrast: z.object({
+      before: z.string(),
+      during: z.string(),
+      after: z.string(),
+    }),
+  }),
+  sceneDiagnosis: z.object({
+    isFlatScene: z.boolean(),
+    flatReasons: z.array(z.string()),
+    solutions: z.array(z.object({
+      title: z.string(),
+      description: z.string(),
+      implementationSteps: z.array(z.string()).optional(),
+    })),
+  }),
+  emotionalChain: z.object({
+    previousScene: z.object({
+      sceneNumber: z.number(),
+      emotionalEndpoint: z.string(),
+      keyEvent: z.string(),
+    }).nullable(),
+    currentScene: z.object({
+      emotionalStartpoint: z.string(),
+      emotionalEndpoint: z.string(),
+      sceneObjective: z.string(),
+    }),
+    nextScene: z.object({
+      sceneNumber: z.number(),
+      emotionalStartpoint: z.string(),
+      transitionNote: z.string(),
+    }).nullable(),
+    directorTip: z.string(),
+  }),
+  characterPerformances: z.array(z.object({
+    characterId: z.string(),
+    characterName: z.string(),
+    positioning: z.object({
+      currentAppearance: z.string(),
+      characterArc: z.string(),
+      currentPhase: z.string(),
+      sceneSignificance: z.string(),
+    }),
+    performanceLayers: z.object({
+      surface: z.string(),
+      middle: z.string(),
+      core: z.string(),
+    }),
+    directorScript: z.array(z.object({
+      segment: z.string(),
+      content: z.string(),
+    })),
+    actionDesign: z.array(z.object({
+      timing: z.string(),
+      action: z.string(),
+      meaning: z.string(),
+    })),
+    subtext: z.array(z.object({
+      originalLine: z.string(),
+      realMeaning: z.string(),
+    })),
+    interactionNotes: z.array(z.object({
+      withCharacter: z.string(),
+      eyeContact: z.string(),
+      physicalDistance: z.string(),
+      bodyContact: z.string(),
+    })),
+  })),
+  scriptSuggestions: z.object({
+    issues: z.array(z.object({
+      type: z.string(),
+      originalContent: z.string(),
+      problem: z.string(),
+    })),
+    improvements: z.array(z.object({
+      title: z.string(),
+      original: z.string(),
+      suggested: z.string(),
+      reason: z.string(),
+    })),
+  }),
+  propPerformance: z.array(z.object({
+    prop: z.string(),
+    usage: z.string(),
+    emotionalMeaning: z.string(),
+  })),
+  costumeProgression: z.array(z.object({
+    timing: z.string(),
+    state: z.string(),
+    meaning: z.string(),
+  })),
+});
+
+export const ScriptAnalysisGlobalGenerationSchema = z.object({
+  characterArcs: z.array(z.object({
+    characterId: z.string(),
+    characterName: z.string(),
+    arcDescription: z.string(),
+    startState: z.string(),
+    endState: z.string(),
+    turningPoints: z.array(z.object({
+      sceneNumber: z.number(),
+      description: z.string(),
+    })),
+    emotionByScene: z.array(z.object({
+      sceneNumber: z.number(),
+      emotion: z.string(),
+      intensity: z.number(),
+    })),
+  })),
+  relationships: z.array(z.object({
+    character1Id: z.string(),
+    character1Name: z.string(),
+    character2Id: z.string(),
+    character2Name: z.string(),
+    relationshipType: z.string(),
+    conflictPoints: z.array(z.string()),
+    evolutionDescription: z.string(),
+  })),
+  emotionMap: z.array(z.object({
+    sceneNumber: z.number(),
+    sceneId: z.string(),
+    overallEmotion: z.string(),
+    intensity: z.number(),
+    isKeyScene: z.boolean(),
+    keySceneType: z.string().optional(),
+  })),
+  keyScenes: z.array(z.number()),
+  overallTheme: z.string(),
+});
+
 // Director style info for display
 export const directorStyleInfo: Record<DirectorStyle, { name: string; nameCN: string; traits: string; works: string }> = {
   quentin_tarantino: { name: "Quentin Tarantino", nameCN: "昆汀·塔伦蒂诺", traits: "长对话、脚部特写、非线性叙事、暴力美学", works: "《低俗小说》《杀死比尔》" },
