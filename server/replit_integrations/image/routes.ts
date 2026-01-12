@@ -15,7 +15,7 @@ export function registerImageRoutes(app: Express): void {
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-exp-image-generation",
+        model: "gemini-3-pro-image-preview",
         contents: prompt,
         config: {
           responseModalities: [Modality.TEXT, Modality.IMAGE],

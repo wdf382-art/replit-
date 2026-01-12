@@ -76,9 +76,13 @@ The UI follows a Linear + Notion hybrid approach emphasizing information clarity
 
 ### AI Services
 - **OpenAI API**: Accessed through Replit AI Integrations proxy
-  - Client imported from `server/replit_integrations/image/client.ts`
-  - Used for script generation, storyboard descriptions, performance guidance, and production notes
+  - Used for text generation: script generation, storyboard descriptions, performance guidance, and production notes
   - All AI responses validated with Zod schemas (ScriptGenerationSchema, ShotsGenerationSchema, PerformanceGuideSchema, ProductionNotesSchema) using safeParseJSON function with explicit fallbacks
+
+- **Gemini API (NANO banana pro)**: Accessed through Replit AI Integrations proxy
+  - Model: `gemini-3-pro-image-preview` (NANO banana pro)
+  - Used for storyboard image generation
+  - Client imported from `server/replit_integrations/image/client.ts`
 
 ### Database
 - **PostgreSQL**: Required for data persistence
