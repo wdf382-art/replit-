@@ -111,6 +111,7 @@ export default function StoryboardPage() {
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [isGeneratingAllImages, setIsGeneratingAllImages] = useState(false);
   const [imageGenProgress, setImageGenProgress] = useState(0);
+  const [storyboardViewType, setStoryboardViewType] = useState<"image" | "text">("image");
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -895,28 +896,54 @@ export default function StoryboardPage() {
               <div className="space-y-4">
                 {/* Header with action buttons */}
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="text-sm text-muted-foreground">
-                    共 {shots.length} 个镜头
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-muted-foreground">
+                      共 {shots.length} 个镜头
+                    </div>
+                    <div className="flex items-center border rounded-md overflow-hidden">
+                      <Button
+                        variant={storyboardViewType === "image" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="rounded-none border-0 h-8"
+                        onClick={() => setStoryboardViewType("image")}
+                        data-testid="button-view-image"
+                      >
+                        <Image className="mr-1 h-3 w-3" />
+                        图片分镜
+                      </Button>
+                      <Button
+                        variant={storyboardViewType === "text" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="rounded-none border-0 h-8"
+                        onClick={() => setStoryboardViewType("text")}
+                        data-testid="button-view-text"
+                      >
+                        <FileText className="mr-1 h-3 w-3" />
+                        文字分镜
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => selectedScene && generateAllImagesMutation.mutate(selectedScene.id)}
-                    disabled={isGeneratingAllImages || !selectedScene}
-                    data-testid="button-generate-all-images"
-                  >
-                    {isGeneratingAllImages ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        批量生成中...
-                      </>
-                    ) : (
-                      <>
-                        <ImagePlus className="mr-2 h-4 w-4" />
-                        一键生成所有图片
-                      </>
-                    )}
-                  </Button>
+                  {storyboardViewType === "image" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => selectedScene && generateAllImagesMutation.mutate(selectedScene.id)}
+                      disabled={isGeneratingAllImages || !selectedScene}
+                      data-testid="button-generate-all-images"
+                    >
+                      {isGeneratingAllImages ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          批量生成中...
+                        </>
+                      ) : (
+                        <>
+                          <ImagePlus className="mr-2 h-4 w-4" />
+                          一键生成所有图片
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 {/* Shots grid */}
@@ -931,71 +958,81 @@ export default function StoryboardPage() {
                     }}
                     data-testid={`shot-card-${shot.id}`}
                   >
-                    <div className="aspect-video bg-muted relative">
-                      {shot.imageBase64 ? (
-                        <img
-                          src={`data:image/png;base64,${shot.imageBase64}`}
-                          alt={`Shot ${shot.shotNumber}`}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                          <Camera className="h-12 w-12 text-muted-foreground/30" />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              generateShotImageMutation.mutate(shot.id);
-                            }}
-                            disabled={generatingImageId === shot.id}
-                            data-testid={`button-generate-image-${shot.id}`}
-                          >
-                            {generatingImageId === shot.id ? (
-                              <>
-                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                                生成中...
-                              </>
-                            ) : (
-                              <>
-                                <ImagePlus className="mr-2 h-3 w-3" />
-                                生成图片
-                              </>
-                            )}
+                    {storyboardViewType === "image" && (
+                      <div className="aspect-video bg-muted relative">
+                        {shot.imageBase64 ? (
+                          <img
+                            src={`data:image/png;base64,${shot.imageBase64}`}
+                            alt={`Shot ${shot.shotNumber}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                            <Camera className="h-12 w-12 text-muted-foreground/30" />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                generateShotImageMutation.mutate(shot.id);
+                              }}
+                              disabled={generatingImageId === shot.id}
+                              data-testid={`button-generate-image-${shot.id}`}
+                            >
+                              {generatingImageId === shot.id ? (
+                                <>
+                                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                  生成中...
+                                </>
+                              ) : (
+                                <>
+                                  <ImagePlus className="mr-2 h-3 w-3" />
+                                  生成图片
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                        <div className="absolute top-2 left-2">
+                          <Badge variant="secondary" className="text-xs">
+                            #{shot.shotNumber}
+                          </Badge>
+                        </div>
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <Button variant="secondary" size="sm">
+                            <Eye className="mr-2 h-4 w-4" />
+                            编辑
                           </Button>
+                          {!shot.imageBase64 && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                generateShotImageMutation.mutate(shot.id);
+                              }}
+                              disabled={generatingImageId === shot.id}
+                            >
+                              {generatingImageId === shot.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <ImagePlus className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <CardContent className={storyboardViewType === "text" ? "p-4" : "p-4"}>
+                      {storyboardViewType === "text" && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant="secondary" className="text-xs">
+                            #{shot.shotNumber}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">镜头</span>
                         </div>
                       )}
-                      <div className="absolute top-2 left-2">
-                        <Badge variant="secondary" className="text-xs">
-                          #{shot.shotNumber}
-                        </Badge>
-                      </div>
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <Button variant="secondary" size="sm">
-                          <Eye className="mr-2 h-4 w-4" />
-                          编辑
-                        </Button>
-                        {!shot.imageBase64 && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              generateShotImageMutation.mutate(shot.id);
-                            }}
-                            disabled={generatingImageId === shot.id}
-                          >
-                            {generatingImageId === shot.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <ImagePlus className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <CardContent className="p-4">
-                      <p className="text-sm line-clamp-2">{shot.description}</p>
+                      <p className={storyboardViewType === "text" ? "text-sm" : "text-sm line-clamp-2"}>{shot.description}</p>
                       <div className="flex flex-wrap gap-1 mt-2">
                         {shot.shotType && (
                           <Badge variant="outline" className="text-xs">
@@ -1016,6 +1053,11 @@ export default function StoryboardPage() {
                       {shot.atmosphere && (
                         <p className="text-xs text-muted-foreground mt-2">
                           气氛: {shot.atmosphere}
+                        </p>
+                      )}
+                      {storyboardViewType === "text" && shot.notes && (
+                        <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+                          备注: {shot.notes}
                         </p>
                       )}
                     </CardContent>

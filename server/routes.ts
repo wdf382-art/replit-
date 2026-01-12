@@ -1112,8 +1112,11 @@ ${directorRulesSection}
     }
   });
 
-  // Generate image for a single shot
+  // Generate image for a single shot with auto-retry
   app.post("/api/shots/:id/generate-image", async (req, res) => {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 2000;
+    
     try {
       const shot = await storage.getShot(req.params.id);
       if (!shot) {
@@ -1122,7 +1125,6 @@ ${directorRulesSection}
 
       const scene = await storage.getScene(shot.sceneId);
       
-      // Build a comprehensive prompt for image generation
       const imagePrompt = `Film storyboard frame, cinematic style:
 Scene: ${scene?.title || ""}
 Location: ${scene?.location || ""}
@@ -1136,13 +1138,33 @@ ${shot.atmosphere ? `Atmosphere: ${shot.atmosphere}` : ""}
 
 Requirements: Professional film cinematography, cinematic lighting, high quality, movie style, 16:9 aspect ratio`;
 
-      // Use OpenAI gpt-image-1 to generate image
       const { generateImageBuffer } = await import("./replit_integrations/image/client");
       
-      const imageBuffer = await generateImageBuffer(imagePrompt, "1024x1024");
+      let imageBuffer: Buffer | null = null;
+      let lastError: Error | null = null;
+      
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          console.log(`Generating image for shot ${shot.id}, attempt ${attempt}/${MAX_RETRIES}`);
+          imageBuffer = await generateImageBuffer(imagePrompt, "1024x1024");
+          break;
+        } catch (err) {
+          lastError = err as Error;
+          console.error(`Image generation attempt ${attempt} failed:`, err);
+          if (attempt < MAX_RETRIES) {
+            const delay = RETRY_DELAY_MS * Math.pow(1.5, attempt - 1);
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      }
+      
+      if (!imageBuffer) {
+        throw lastError || new Error("Failed to generate image after all retries");
+      }
+      
       const imageBase64 = imageBuffer.toString("base64");
 
-      // Save image to the shot
       const updatedShot = await storage.updateShot(shot.id, {
         imageBase64: imageBase64,
       });
@@ -1154,8 +1176,11 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
     }
   });
 
-  // Generate images for all shots in a scene
+  // Generate images for all shots in a scene with auto-retry
   app.post("/api/scenes/:id/generate-all-images", async (req, res) => {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 2000;
+    
     try {
       const scene = await storage.getScene(req.params.id);
       if (!scene) {
@@ -1171,8 +1196,7 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
       const results = [];
       
       for (const shot of shots) {
-        try {
-          const imagePrompt = `Film storyboard frame, cinematic style:
+        const imagePrompt = `Film storyboard frame, cinematic style:
 Scene: ${scene.title || ""}
 Location: ${scene.location || ""}
 Time: ${scene.timeOfDay || ""}
@@ -1185,16 +1209,32 @@ ${shot.atmosphere ? `Atmosphere: ${shot.atmosphere}` : ""}
 
 Requirements: Professional film cinematography, cinematic lighting, high quality, movie style, 16:9 aspect ratio`;
 
-          const imageBuffer = await generateImageBuffer(imagePrompt, "1024x1024");
+        let imageBuffer: Buffer | null = null;
+        
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            console.log(`Generating image for shot ${shot.id} (${shot.shotNumber}), attempt ${attempt}/${MAX_RETRIES}`);
+            imageBuffer = await generateImageBuffer(imagePrompt, "1024x1024");
+            break;
+          } catch (err) {
+            console.error(`Image generation attempt ${attempt} for shot ${shot.id} failed:`, err);
+            if (attempt < MAX_RETRIES) {
+              const delay = RETRY_DELAY_MS * Math.pow(1.5, attempt - 1);
+              console.log(`Retrying shot ${shot.id} in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
+        }
+        
+        if (imageBuffer) {
           const imageBase64 = imageBuffer.toString("base64");
-
           await storage.updateShot(shot.id, {
             imageBase64: imageBase64,
           });
-          results.push({ id: shot.id, success: true });
-        } catch (err) {
-          console.error(`Error generating image for shot ${shot.id}:`, err);
-          results.push({ id: shot.id, success: false, error: "Generation failed" });
+          results.push({ id: shot.id, shotNumber: shot.shotNumber, success: true });
+        } else {
+          console.error(`Failed to generate image for shot ${shot.id} after ${MAX_RETRIES} attempts`);
+          results.push({ id: shot.id, shotNumber: shot.shotNumber, success: false, error: "Generation failed after retries" });
         }
       }
 
@@ -1476,7 +1516,8 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
 
       res.json({
         success: true,
-        message: `数据已准备完成（${format.toUpperCase()}格式）。完整文件生成功能将在后续版本中提供。`,
+        message: `数据已准备完成（${format.toUpperCase()}格式）`,
+        projectTitle: project.title,
         data: exportData,
       });
     } catch (error) {

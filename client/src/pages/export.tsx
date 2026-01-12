@@ -106,25 +106,47 @@ export default function ExportPage() {
       sceneIds: string[];
       includeVersions: boolean;
     }) => {
-      const response = await apiRequest("POST", "/api/export", data);
+      const response = await apiRequest<{ success?: boolean; data?: Record<string, unknown>; projectTitle?: string; url?: string }>("POST", "/api/export", data);
       return response;
     },
-    onSuccess: (data: { url?: string }) => {
+    onSuccess: (response) => {
       setIsExporting(false);
       setExportProgress(100);
-      toast({
-        title: "导出完成",
-        description: "文件已准备就绪，即将开始下载",
-      });
-      if (data && data.url) {
-        window.open(data.url, "_blank");
+      
+      if (response?.url) {
+        window.open(response.url, "_blank");
+        toast({
+          title: "导出完成",
+          description: "文件已准备就绪",
+        });
+      } else if (response?.success && response?.data) {
+        const jsonStr = JSON.stringify(response.data, null, 2);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${response.projectTitle || currentProject?.title || "export"}_${new Date().toISOString().split("T")[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        toast({
+          title: "导出完成",
+          description: "文件已下载到本地",
+        });
+      } else {
+        toast({
+          title: "导出成功",
+          description: "数据已准备完成",
+        });
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
       setIsExporting(false);
       toast({
         title: "导出失败",
-        description: "请稍后重试",
+        description: error.message || "请稍后重试",
         variant: "destructive",
       });
     },
