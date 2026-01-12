@@ -135,8 +135,13 @@ export default function StoryboardPage() {
   });
 
   useEffect(() => {
-    if (scenes && scenes.length > 0 && !selectedScene) {
-      setSelectedScene(scenes[0]);
+    if (scenes && scenes.length > 0) {
+      // If no scene selected or selected scene no longer exists in the list, select first one
+      if (!selectedScene || !scenes.find(s => s.id === selectedScene.id)) {
+        setSelectedScene(scenes[0]);
+      }
+    } else if (scenes && scenes.length === 0) {
+      setSelectedScene(null);
     }
   }, [scenes, selectedScene]);
 
