@@ -1,8 +1,9 @@
 import type { Express, Request, Response } from "express";
-import { GoogleGenAI, Modality } from "@google/genai";
+import OpenAI from "openai";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
 export function registerImageRoutes(app: Express): void {
@@ -14,25 +15,21 @@ export function registerImageRoutes(app: Express): void {
         return res.status(400).json({ error: "Prompt is required" });
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-pro-image-preview",
-        contents: prompt,
-        config: {
-          responseModalities: [Modality.TEXT, Modality.IMAGE],
-        },
+      const response = await openai.images.generate({
+        model: "gpt-image-1",
+        prompt,
+        size: "1024x1024",
       });
 
-      const candidate = response.candidates?.[0];
-      const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
-
-      if (!imagePart?.inlineData?.data) {
+      const base64 = response.data[0]?.b64_json ?? "";
+      
+      if (!base64) {
         return res.status(500).json({ error: "No image data in response" });
       }
 
-      const mimeType = imagePart.inlineData.mimeType || "image/png";
       res.json({
-        b64_json: imagePart.inlineData.data,
-        mimeType,
+        b64_json: base64,
+        mimeType: "image/png",
         aspectRatio,
       });
     } catch (error) {
@@ -41,4 +38,3 @@ export function registerImageRoutes(app: Express): void {
     }
   });
 }
-
