@@ -274,8 +274,8 @@ export default function StoryboardPage() {
   });
 
   const extractAllScenesMutation = useMutation({
-    mutationFn: async (projectId: string) => {
-      return apiRequest("POST", "/api/scenes/extract-all", { projectId });
+    mutationFn: async ({ projectId, forceRefresh = false }: { projectId: string; forceRefresh?: boolean }) => {
+      return apiRequest("POST", "/api/scenes/extract-all", { projectId, forceRefresh });
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject?.id] });
@@ -287,7 +287,7 @@ export default function StoryboardPage() {
     onError: (error: any) => {
       toast({
         title: "提取失败",
-        description: error.message || "请确保剧本中包含场次标记 (如: 第1场)",
+        description: error.message || "请确保剧本中包含场次标记",
         variant: "destructive",
       });
     },
@@ -561,7 +561,11 @@ export default function StoryboardPage() {
               className="w-full mb-2" 
               onClick={() => {
                 if (currentProject?.id) {
-                  extractAllScenesMutation.mutate(currentProject.id);
+                  const hasScenes = scenes && scenes.length > 0;
+                  extractAllScenesMutation.mutate({ 
+                    projectId: currentProject.id, 
+                    forceRefresh: hasScenes 
+                  });
                 }
               }}
               disabled={!currentProject?.id || extractAllScenesMutation.isPending}
@@ -572,7 +576,7 @@ export default function StoryboardPage() {
               ) : (
                 <Sparkles className="mr-2 h-4 w-4" />
               )}
-              从剧本提取所有场次
+              {scenes && scenes.length > 0 ? "重新识别场次 (AI)" : "从剧本提取所有场次"}
             </Button>
 
             <Button 
@@ -610,8 +614,13 @@ export default function StoryboardPage() {
                   data-testid={`scene-item-${scene.id}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-sm">场次 {scene.sceneNumber}</span>
+                    <span className="font-medium text-sm">
+                      {(scene as any).sceneIdentifier || `场次 ${scene.sceneNumber}`}
+                    </span>
                     <div className="flex items-center gap-1">
+                      {scene.isInCallSheet && (
+                        <Badge variant="outline" className="text-[10px]">通告单</Badge>
+                      )}
                       {scene.isInCallSheet && !scene.description && !scene.dialogue && !scene.action && (
                         <Badge variant="default" className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm transition-all">识别中</Badge>
                       )}
@@ -659,7 +668,13 @@ export default function StoryboardPage() {
                           <p className="text-xs line-clamp-3 mt-0.5">{scene.action}</p>
                         </div>
                       )}
-                      {!scene.description && !scene.dialogue && !scene.action && (
+                      {(scene as any).scriptContent && (
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">原文内容</p>
+                          <p className="text-xs line-clamp-4 mt-0.5 whitespace-pre-wrap">{(scene as any).scriptContent}</p>
+                        </div>
+                      )}
+                      {!scene.description && !scene.dialogue && !scene.action && !(scene as any).scriptContent && (
                         <p className="text-[10px] text-muted-foreground italic">暂无剧本详情</p>
                       )}
                       <Button 
