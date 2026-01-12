@@ -475,8 +475,8 @@ export default function StoryboardPage() {
   const currentDirector = selectedDirectorStyle !== "custom" ? directorStyleInfo[selectedDirectorStyle as DirectorStyle] : null;
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      <div className="w-72 border-r overflow-hidden flex flex-col">
+    <div className="flex-1 flex min-h-0">
+      <div className="w-72 border-r flex flex-col min-h-0">
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold">场次列表</h2>
           <Button 
@@ -689,7 +689,7 @@ export default function StoryboardPage() {
         </ScrollArea>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between gap-4 p-4 border-b flex-wrap">
           <div className="flex items-center gap-3">
             <Image className="h-5 w-5 text-muted-foreground" />
