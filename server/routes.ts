@@ -939,6 +939,10 @@ export async function registerRoutes(
         ? `自定义画面风格：${customVisualStyle}`
         : `${visual!.nameCN}`;
 
+      const sceneContentLength = (scene.description?.length || 0) + (scene.dialogue?.length || 0) + (scene.action?.length || 0) + ((scene as any).scriptContent?.length || 0);
+      const estimatedMinutes = Math.max(0.5, sceneContentLength / 300);
+      const estimatedSeconds = Math.round(estimatedMinutes * 60);
+
       const prompt = `你是一位专业的电影分镜师，精通${directorDescription}
 
 请为以下场次设计分镜头：
@@ -951,6 +955,11 @@ export async function registerRoutes(
 
 画面风格要求：${visualDescription}
 画幅比例：${finalAspectRatio || "16:9"}
+
+## 镜头数量参考
+- 该场次剧本约${sceneContentLength}字，预估成片时长约${estimatedSeconds}秒（${estimatedMinutes.toFixed(1)}分钟）
+- 请根据内容量和节奏需要自行决定镜头数量，确保所有镜头的duration总和接近预估时长
+- 电视剧平均每分钟约15-25个镜头（快节奏）或8-15个镜头（慢节奏）
 
 ## 专业分镜规则（必须遵守）
 
@@ -970,12 +979,12 @@ export async function registerRoutes(
 - 情绪承接：相邻镜头的氛围应有逻辑过渡
 
 ### 4. 场景叙事结构
-- 起：建立场景空间和人物位置（1-2镜）
-- 承：展开叙事，推进情节（3-5镜）
-- 转：情绪或事件转折点（2-3镜）
-- 合：场景收尾，留有余韵（1-2镜）
+- 起：建立场景空间和人物位置
+- 承：展开叙事，推进情节
+- 转：情绪或事件转折点
+- 合：场景收尾，留有余韵
 
-请设计8-12个镜头，体现导演风格特点，严格遵守以上分镜规则。
+请根据场次内容设计合适数量的镜头，体现导演风格特点，严格遵守以上分镜规则。
 
 返回JSON格式：
 {
@@ -993,12 +1002,12 @@ export async function registerRoutes(
   ]
 }`;
 
-      console.log("[Shots Generate] Sending request to OpenAI...");
+      console.log(`[Shots Generate] Scene content: ${sceneContentLength} chars, estimated: ${estimatedSeconds}s`);
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        max_completion_tokens: 2048,
+        max_completion_tokens: 4096,
       });
 
       const content = response.choices[0]?.message?.content || "{}";
