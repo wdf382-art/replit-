@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { 
   Plus,
@@ -20,6 +20,7 @@ import type { Project } from "@shared/schema";
 import { projectTypeInfo } from "@shared/schema";
 
 export default function Dashboard() {
+  const [, navigate] = useLocation();
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
   });
@@ -150,11 +151,18 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Link href={`/projects/${project.id}/analysis`}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
-                              <BarChart className="h-4 w-4" />
-                            </Button>
-                          </Link>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              navigate(`/projects/${project.id}/analysis`);
+                            }}
+                          >
+                            <BarChart className="h-4 w-4" />
+                          </Button>
                           <ArrowRight className="h-4 w-4 text-muted-foreground" />
                         </div>
                       </div>
