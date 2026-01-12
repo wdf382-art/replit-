@@ -664,6 +664,10 @@ ${content.substring(0, 8000)}
 
   app.delete("/api/scenes/:id", async (req, res) => {
     try {
+      const scene = await storage.getScene(req.params.id);
+      if (!scene) {
+        return res.status(404).json({ error: "Scene not found" });
+      }
       await storage.deleteScene(req.params.id);
       res.status(204).send();
     } catch (error) {
