@@ -144,3 +144,36 @@ The storyboard generation now uses a comprehensive director style framework with
 - `directorStyleRulesV2`: Complete 8-dimension rules for each director in `shared/schema.ts`
 - `universalCinematographyRules`: Base cinematography rules that all directors work within/around
 - Each director rule specifies variant type: 遵守(follow), 变化(modify), 打破(break), 强化(enhance), 不适用(N/A)
+
+## Performance Guidance V2 Module (Updated 2026-01-12)
+
+### Design Philosophy
+Performance guidance precedes storyboard work - "camera serves performance" (镜头为表演服务). The system must analyze the entire script (全剧分析) before generating scene-specific guidance.
+
+### Two-Phase Architecture
+1. **Global Script Analysis** (全剧分析)
+   - Analyzes complete script before any scene-specific work
+   - Generates: character arcs (人物弧光), emotion maps (情绪地图), relationship networks (关系网络)
+   - Stored in `scriptAnalysisGlobal` table with JSONB fields
+   - API: GET/POST `/api/script-analysis-global/:projectId`
+
+2. **Scene-Specific Performance Guidance** (单场表演指导)
+   - Requires global analysis to exist first
+   - Generates four components per scene:
+     - **戏点 (Scene Hook)**: Core dramatic moment with emotion curve (开场→铺垫→高潮→收尾)
+     - **平淡诊断 (Flatness Diagnosis)**: Identifies flat scenes with unlimited modification solutions
+     - **情绪承接 (Emotional Chain)**: Links previous→current→next scene emotional flow
+     - **导演讲戏稿 (Director Scripts)**: Second-person "你" guidance for each character
+   - Stored in `performanceGuidesV2` table
+   - API: GET/POST `/api/performance-guides-v2/:sceneId`
+
+### Key Data Structures (shared/schema.ts)
+- `SceneHookData`: hookDescription, hookType, hookPosition, hookTrigger, emotionCurve, beforeAfterContrast
+- `SceneDiagnosisData`: isFlatScene, flatReasons, solutions (with optional implementationSteps)
+- `EmotionalChainData`: previousScene, currentScene, nextScene emotional states with directorTip
+- `CharacterPerformanceData`: positioning, performanceLayers (surface/middle/core), directorScript segments
+
+### UI Structure (performance.tsx)
+- Left panel: Project selector + scene list navigation
+- Right panel: Scene-specific guidance with collapsible sections
+- Header buttons: "全剧分析" (global analysis) + "生成本场指导" (generate scene guidance)
