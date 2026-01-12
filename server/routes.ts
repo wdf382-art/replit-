@@ -2162,48 +2162,113 @@ ${nextScene ? `
 【本场涉及角色】
 ${characters.map(c => `${c.name}: ${c.description || "暂无描述"}`).join("\n") || "请从剧本中识别角色"}
 
-请生成完整的表演指导，包含以下内容：
+请生成完整的表演指导，必须严格按照以下JSON格式返回（注意：字段名必须用英文camelCase，数值必须是数字不是字符串）：
 
-1. sceneHook - 本场戏点分析
-   - hookDescription: 核心戏点是什么
-   - hookType: 类型(情感爆发/悬念揭晓/关系逆转/真相大白/冲突升级/情感铺垫)
-   - hookPosition: 位置(开场/中段/高潮/结尾)
-   - hookTrigger: 触发点(具体台词或动作)
-   - emotionCurve: { opening: 0-100, buildup: 0-100, climax: 0-100, ending: 0-100 }
-   - beforeAfterContrast: { before, during, after }
+{
+  "sceneHook": {
+    "hookDescription": "本场核心戏点的详细描述，例如：父子情感冲突在沉默中爆发",
+    "hookType": "情感爆发",
+    "hookPosition": "高潮",
+    "hookTrigger": "当秦天说出那句'我从没怪过你'时",
+    "emotionCurve": {
+      "opening": 30,
+      "buildup": 55,
+      "climax": 90,
+      "ending": 60
+    },
+    "beforeAfterContrast": {
+      "before": "场景开始前的氛围状态描述",
+      "during": "戏点发生时的强烈变化描述",
+      "after": "戏点过后的情绪沉淀描述"
+    }
+  },
+  "sceneDiagnosis": {
+    "isFlatScene": false,
+    "flatReasons": ["如果是平场，列出原因"],
+    "solutions": [
+      {
+        "title": "破平方案标题",
+        "description": "详细描述如何改进这场戏，可以改台词、改动作、删戏、加戏等",
+        "implementationSteps": ["第一步做什么", "第二步做什么"]
+      }
+    ]
+  },
+  "emotionalChain": {
+    "previousScene": {
+      "sceneNumber": 1,
+      "emotionalEndpoint": "上一场结束时的情绪状态",
+      "keyEvent": "上一场的关键事件"
+    },
+    "currentScene": {
+      "emotionalStartpoint": "本场开始时演员应该带入的情绪",
+      "emotionalEndpoint": "本场结束时应该达到的情绪",
+      "sceneObjective": "本场的核心目标是什么"
+    },
+    "nextScene": {
+      "sceneNumber": 3,
+      "emotionalStartpoint": "下一场需要承接的情绪起点",
+      "transitionNote": "情绪如何过渡到下一场"
+    },
+    "directorTip": "开拍前导演应该提醒演员的关键点"
+  },
+  "characterPerformances": [
+    {
+      "characterId": "unknown",
+      "characterName": "角色名",
+      "positioning": {
+        "currentAppearance": "第3/共12场",
+        "characterArc": "角色在全剧中的人物弧光",
+        "currentPhase": "角色当前处于弧光的哪个阶段",
+        "sceneSignificance": "这场戏对角色发展的重要意义"
+      },
+      "performanceLayers": {
+        "surface": "表层：观众直接看到的表现",
+        "middle": "中层：角色此刻的真实情绪",
+        "core": "核心：驱动角色行为的深层动机"
+      },
+      "directorScript": [
+        {
+          "segment": "开场",
+          "content": "用第二人称'你'的口吻写给演员的详细表演指导，例如：你一进门就要带着疲惫，但又努力掩饰，因为你不想让家人担心..."
+        },
+        {
+          "segment": "中段",
+          "content": "详细的中段表演指导..."
+        },
+        {
+          "segment": "高潮",
+          "content": "详细的高潮段落表演指导..."
+        },
+        {
+          "segment": "结尾",
+          "content": "详细的结尾表演指导..."
+        }
+      ],
+      "actionDesign": [
+        {"timing": "开场", "action": "具体动作描述", "meaning": "动作的含义"}
+      ],
+      "subtext": [
+        {"originalLine": "原台词", "realMeaning": "潜台词/真正想说的"}
+      ],
+      "interactionNotes": [
+        {"withCharacter": "对手角色名", "eyeContact": "眼神接触方式", "physicalDistance": "身体距离", "bodyContact": "身体接触"}
+      ]
+    }
+  ],
+  "scriptSuggestions": {
+    "issues": [{"type": "类型", "originalContent": "原内容", "problem": "问题"}],
+    "improvements": [{"title": "改进标题", "original": "原文", "suggested": "建议改为", "reason": "原因"}]
+  },
+  "propPerformance": [{"prop": "道具名", "usage": "使用方式", "emotionalMeaning": "情感意义"}],
+  "costumeProgression": [{"timing": "时间点", "state": "服装状态", "meaning": "含义"}]
+}
 
-2. sceneDiagnosis - 场次质量诊断
-   - isFlatScene: 是否存在"平"的风险
-   - flatReasons: 如果"平"，原因是什么
-   - solutions: 2-3个破"平"方案，可以是任何修改：改台词、改场景、改动作、删戏、加戏等，无限制
-
-3. emotionalChain - 情绪承接链
-   - previousScene: { sceneNumber, emotionalEndpoint, keyEvent } 或 null
-   - currentScene: { emotionalStartpoint, emotionalEndpoint, sceneObjective }
-   - nextScene: { sceneNumber, emotionalStartpoint, transitionNote } 或 null
-   - directorTip: 给导演的开拍提示
-
-4. characterPerformances - 每个角色的详细表演指导
-   - characterId, characterName
-   - positioning: { currentAppearance: "第X/共Y场", characterArc, currentPhase, sceneSignificance }
-   - performanceLayers: { surface: 表层表现, middle: 中层情绪, core: 核心驱动 }
-   - directorScript: 【核心！】导演讲戏稿，用第二人称"你"的口吻，分段落(开场/中段/戏点/结尾)，每段都要非常详细具体，可以直接用来和演员沟通
-   - actionDesign: 具体动作设计 [{ timing, action, meaning }]
-   - subtext: 潜台词对照表 [{ originalLine, realMeaning }]
-   - interactionNotes: 对手戏处理 [{ withCharacter, eyeContact, physicalDistance, bodyContact }]
-
-5. scriptSuggestions - 剧本优化建议（如果原剧本有问题）
-   - issues: [{ type, originalContent, problem }]
-   - improvements: [{ title, original, suggested, reason }]
-   - 注意：可以建议任何修改，包括删戏、改台词、改场景等
-
-6. propPerformance - 道具表演关联
-   - [{ prop, usage, emotionalMeaning }]
-
-7. costumeProgression - 服装状态变化
-   - [{ timing, state, meaning }]
-
-返回JSON格式。`;
+【重要】
+- emotionCurve的值必须是0-100的数字（如30, 55, 90），不能是字符串
+- previousScene如果是第一场则设为null
+- nextScene如果是最后一场则设为null
+- characterPerformances必须为每个出场角色生成详细指导
+- directorScript是最重要的部分，要用"你"的口吻，非常详细具体地指导演员如何表演`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-5",
