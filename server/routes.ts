@@ -952,20 +952,43 @@ export async function registerRoutes(
 画面风格要求：${visualDescription}
 画幅比例：${finalAspectRatio || "16:9"}
 
-请设计8-12个镜头，体现导演风格特点。镜头数量必须至少8个。
+## 专业分镜规则（必须遵守）
+
+### 1. 景别衔接原则
+- 循序渐进：景别变化应有过渡，避免直接从远景跳到特写
+- 30度规则：相邻镜头机位变化至少30度，避免跳切感
+- 轴线规则：保持180度轴线，确保空间方向连贯
+
+### 2. 镜头节奏控制
+- 长短搭配：激烈/紧张场景用短镜头（2-3秒），抒情/沉思场景用长镜头（5-8秒）
+- 开场建立：第一个镜头通常是环境交代（远景或全景）
+- 高潮递进：情绪高潮前镜头逐渐加快、景别逐渐收紧
+
+### 3. 视觉引导与衔接
+- 视线匹配：角色看向画外时，下一镜头展示其视线方向
+- 动作衔接：动作在前一镜头开始/进行，后一镜头接续/完成
+- 情绪承接：相邻镜头的氛围应有逻辑过渡
+
+### 4. 场景叙事结构
+- 起：建立场景空间和人物位置（1-2镜）
+- 承：展开叙事，推进情节（3-5镜）
+- 转：情绪或事件转折点（2-3镜）
+- 合：场景收尾，留有余韵（1-2镜）
+
+请设计8-12个镜头，体现导演风格特点，严格遵守以上分镜规则。
 
 返回JSON格式：
 {
   "shots": [
     {
       "shotNumber": 1,
-      "description": "镜头详细描述",
+      "description": "镜头详细描述（包含画面内容、人物动作、光影氛围）",
       "shotType": "景别（extreme_wide/wide/full/medium/close_up/extreme_close_up/over_shoulder/pov）",
       "cameraAngle": "角度（eye_level/low_angle/high_angle/bird_eye/dutch_angle/worm_eye）",
       "cameraMovement": "运动（static/pan/tilt/dolly/tracking/crane/handheld/steadicam/zoom）",
       "duration": 持续秒数,
       "atmosphere": "画面气氛描述",
-      "notes": "导演风格体现说明"
+      "notes": "导演风格体现 + 与前后镜头的衔接逻辑说明"
     }
   ]
 }`;
