@@ -247,7 +247,7 @@ export default function PerformancePage() {
                   data-testid={`scene-nav-${scene.id}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">第{scene.sceneNumber}场</span>
+                    <span className="text-sm font-medium">第{scene.sceneIdentifier || scene.sceneNumber}场</span>
                     {scene.id === selectedScene?.id && <ChevronRight className="h-4 w-4" />}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
@@ -275,7 +275,7 @@ export default function PerformancePage() {
               <h1 className="text-lg font-semibold" data-testid="text-performance-title">表演指导</h1>
               {selectedScene && (
                 <p className="text-sm text-muted-foreground">
-                  第{selectedScene.sceneNumber}场 - {selectedScene.title || selectedScene.location || "未命名"}
+                  第{selectedScene.sceneIdentifier || selectedScene.sceneNumber}场 - {selectedScene.title || selectedScene.location || "未命名"}
                 </p>
               )}
             </div>
