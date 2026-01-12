@@ -904,15 +904,18 @@ ${content.substring(0, 8000)}
   ]
 }`;
 
+      console.log("[Shots Generate] Sending request to OpenAI...");
       const response = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
         max_completion_tokens: 2048,
       });
 
       const content = response.choices[0]?.message?.content || "{}";
+      console.log("[Shots Generate] OpenAI response:", content.substring(0, 500));
       const result = safeParseJSON(content, ShotsGenerationSchema, "shots");
+      console.log("[Shots Generate] Parsed shots count:", result.shots.length);
 
       const createdShots = [];
       for (const shot of result.shots) {
