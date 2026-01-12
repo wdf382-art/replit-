@@ -46,12 +46,12 @@ function App() {
           <SidebarProvider style={sidebarStyle as React.CSSProperties}>
             <div className="flex h-screen w-full">
               <AppSidebar />
-              <SidebarInset className="flex flex-col flex-1 overflow-hidden">
+              <SidebarInset className="flex flex-col flex-1 min-h-0">
                 <header className="flex items-center justify-between gap-2 px-4 h-14 border-b shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                   <SidebarTrigger data-testid="button-sidebar-toggle" />
                   <ThemeToggle />
                 </header>
-                <main className="flex-1 overflow-hidden">
+                <main className="flex-1 min-h-0">
                   <Router />
                 </main>
               </SidebarInset>
