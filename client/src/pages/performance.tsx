@@ -145,8 +145,8 @@ export default function PerformancePage() {
     mutationFn: async (sceneId: string) => {
       return apiRequest("POST", "/api/performance-guides-v2/generate", { sceneId });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/performance-guides-v2"] });
+    onSuccess: (_data, sceneId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/performance-guides-v2", sceneId] });
       setIsGeneratingScene(false);
       setGenerationProgress(100);
       toast({
@@ -154,11 +154,11 @@ export default function PerformancePage() {
         description: "AI已生成详细的表演指导",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       setIsGeneratingScene(false);
       toast({
         title: "生成失败",
-        description: "请稍后重试",
+        description: error.message || "请稍后重试",
         variant: "destructive",
       });
     },
@@ -372,6 +372,48 @@ export default function PerformancePage() {
                           {(globalAnalysis.keyScenes as number[]).map((num) => (
                             <Badge key={num} variant="secondary">第{num}场</Badge>
                           ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            )}
+
+            {selectedScene && (selectedScene.dialogue || selectedScene.action) && (
+              <Collapsible defaultOpen>
+                <Card data-testid="card-scene-content">
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="h-5 w-5 text-primary" />
+                        <CardTitle>场次原文</CardTitle>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-4">
+                      {selectedScene.dialogue && (
+                        <div>
+                          <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4" />
+                            对白
+                          </div>
+                          <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 p-3 rounded-md max-h-48 overflow-y-auto">
+                            {selectedScene.dialogue}
+                          </div>
+                        </div>
+                      )}
+                      {selectedScene.action && (
+                        <div>
+                          <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                            <Zap className="h-4 w-4" />
+                            动作描写
+                          </div>
+                          <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 p-3 rounded-md max-h-48 overflow-y-auto">
+                            {selectedScene.action}
+                          </div>
                         </div>
                       )}
                     </CardContent>
