@@ -105,6 +105,119 @@ const defaultFallbacks = {
   production: { notes: [] },
 };
 
+// Standalone function to extract scene content from script
+// This function can be reused by call sheet parsing, scene preview, and scene creation
+export function extractSceneContentFromScript(scriptContent: string, sceneNum: number): { 
+  title: string | null; 
+  location: string | null; 
+  timeOfDay: string | null; 
+  description: string | null; 
+  dialogue: string | null; 
+  action: string | null; 
+} {
+  if (!scriptContent) {
+    console.log(`[Scene Extract] No script content available for scene ${sceneNum}`);
+    return { title: null, location: null, timeOfDay: null, description: null, dialogue: null, action: null };
+  }
+  
+  console.log(`[Scene Extract] Attempting to extract scene ${sceneNum} from script (${scriptContent.length} chars)`);
+  
+  // Match scene header line patterns, supporting multiple formats:
+  // 第1场, 1-1, 1.1, 场次1 etc.
+  const scenePatterns = [
+    // Most common: match "第X场" format (e.g., "第1场 医院走廊 日 内")
+    new RegExp(`(?:^|[\\n\\r])\\s*(第\\s*${sceneNum}\\s*[场集次][^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*第\\s*[一二三四五六七八九十百\\d]+\\s*[场集次]|[\\n\\r]\\s*\\d+[-.]\\d+\\s|$)`, 'i'),
+    // Match "X-Y" or "X.Y" format (e.g., 1-1, 4-8, 4.1)
+    new RegExp(`(?:^|[\\n\\r])\\s*(${sceneNum}[-.]\\d+[^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*\\d+[-.]\\d+\\s|[\\n\\r]\\s*第[一二三四五六七八九十百\\d]+[场集]|$)`, 'i'),
+    // Match plain "场次X" format
+    new RegExp(`(?:^|[\\n\\r])\\s*(场次\\s*${sceneNum}[^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*场次\\s*\\d+|[\\n\\r]\\s*第\\d+场|$)`, 'i'),
+  ];
+  
+  let matchedContent = '';
+  let matchedTitle = '';
+  
+  for (let i = 0; i < scenePatterns.length; i++) {
+    const pattern = scenePatterns[i];
+    const match = scriptContent.match(pattern);
+    if (match) {
+      matchedTitle = match[1]?.trim() || '';
+      matchedContent = match[2]?.trim() || '';
+      console.log(`[Scene Extract] Pattern ${i + 1} matched for scene ${sceneNum}: title="${matchedTitle.substring(0, 50)}..."`);
+      break;
+    }
+  }
+  
+  if (!matchedContent && !matchedTitle) {
+    console.log(`[Scene Extract] No match found for scene ${sceneNum}`);
+    return { title: null, location: null, timeOfDay: null, description: null, dialogue: null, action: null };
+  }
+  
+  console.log(`[Scene Extract] Found content for scene ${sceneNum}: ${matchedContent.length} chars`);
+  
+  // Parse time and location (usually in the title line)
+  let location: string | null = null;
+  let timeOfDay: string | null = null;
+  
+  // Match location (usually in title, e.g., "医院走廊", "秦天家")
+  const locationMatch = matchedTitle.match(/([^\d\s年月日夜内外]+(?:家|院|室|厅|房|街|道|楼|场|店|局|处|所|馆|园|村|镇|城|区|河边|别墅|走廊|书房|卧室|办公室)[^\s]*)/);
+  if (locationMatch) {
+    location = locationMatch[1];
+  }
+  
+  // Match time (日、夜、黄昏 etc.)
+  const timeMatch = matchedTitle.match(/(日|夜|黄昏|清晨|傍晚|午后|凌晨)/);
+  if (timeMatch) {
+    timeOfDay = timeMatch[1];
+  }
+  
+  // Separate dialogue and action descriptions
+  const lines = matchedContent.split('\n');
+  const dialogueLines: string[] = [];
+  const actionLines: string[] = [];
+  const descriptionLines: string[] = [];
+  
+  let currentSection = 'description';
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) continue;
+    
+    // Determine if it's dialogue or action
+    // Dialogue usually formatted as: 角色名：对白内容 or 角色名（VO）：对白
+    if (/^[^\s△▲●○◆◇【】\[\]]+[:：]/.test(trimmedLine) || /\(VO\)|（VO）/.test(trimmedLine)) {
+      dialogueLines.push(trimmedLine);
+      currentSection = 'dialogue';
+    } 
+    // Action descriptions usually start with △ or ▲
+    else if (/^[△▲]/.test(trimmedLine)) {
+      actionLines.push(trimmedLine.replace(/^[△▲]\s*/, ''));
+      currentSection = 'action';
+    }
+    // Character line
+    else if (/^人物[:：]/.test(trimmedLine)) {
+      descriptionLines.push(trimmedLine);
+    }
+    // Other content goes to description
+    else {
+      if (currentSection === 'dialogue' && dialogueLines.length > 0) {
+        // Possibly continuation of dialogue
+        dialogueLines.push(trimmedLine);
+      } else {
+        descriptionLines.push(trimmedLine);
+      }
+    }
+  }
+  
+  return {
+    title: matchedTitle || null,
+    location,
+    timeOfDay,
+    description: descriptionLines.length > 0 ? descriptionLines.join('\n') : null,
+    dialogue: dialogueLines.length > 0 ? dialogueLines.join('\n') : null,
+    action: actionLines.length > 0 ? actionLines.join('\n') : null,
+  };
+}
+
 function safeParseJSON<T>(content: string, schema: z.ZodSchema<T>, fallbackKey?: keyof typeof defaultFallbacks): T {
   try {
     const parsed = JSON.parse(content);
@@ -454,13 +567,81 @@ ${content.substring(0, 8000)}
     }
   });
 
+  app.post("/api/scenes/preview", async (req, res) => {
+    try {
+      const { projectId, sceneNumber } = req.body as { projectId: string; sceneNumber: number };
+      if (!projectId || !sceneNumber) {
+        return res.status(400).json({ error: "projectId and sceneNumber are required" });
+      }
+
+      const scripts = await storage.getScripts(projectId);
+      const activeScript = scripts.find(s => s.isActive);
+      
+      if (!activeScript?.content) {
+        return res.json({ 
+          found: false, 
+          message: "没有找到活动的剧本",
+          title: null,
+          location: null, 
+          timeOfDay: null, 
+          description: null, 
+          dialogue: null, 
+          action: null 
+        });
+      }
+
+      const extracted = extractSceneContentFromScript(activeScript.content, sceneNumber);
+      
+      if (!extracted.title && !extracted.description && !extracted.dialogue && !extracted.action) {
+        return res.json({ 
+          found: false, 
+          message: `剧本中未找到场次 ${sceneNumber} 的内容`,
+          ...extracted
+        });
+      }
+
+      res.json({ 
+        found: true, 
+        message: `已从剧本中提取场次 ${sceneNumber} 的内容`,
+        scriptId: activeScript.id,
+        ...extracted 
+      });
+    } catch (error) {
+      console.error("Error previewing scene:", error);
+      res.status(500).json({ error: "Failed to preview scene content" });
+    }
+  });
+
   app.post("/api/scenes", async (req, res) => {
     try {
       const parsed = insertSceneSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const scene = await storage.createScene(parsed.data);
+      
+      const { projectId, sceneNumber, title } = parsed.data;
+      
+      const scripts = await storage.getScripts(projectId);
+      const activeScript = scripts.find(s => s.isActive);
+      
+      let sceneData = { ...parsed.data };
+      
+      if (activeScript?.content) {
+        const extracted = extractSceneContentFromScript(activeScript.content, sceneNumber);
+        
+        sceneData = {
+          ...sceneData,
+          scriptId: activeScript.id,
+          title: title || extracted.title || `第 ${sceneNumber} 场`,
+          location: sceneData.location || extracted.location,
+          timeOfDay: sceneData.timeOfDay || extracted.timeOfDay,
+          description: sceneData.description || extracted.description,
+          dialogue: sceneData.dialogue || extracted.dialogue,
+          action: sceneData.action || extracted.action,
+        };
+      }
+      
+      const scene = await storage.createScene(sceneData);
       res.status(201).json(scene);
     } catch (error) {
       console.error("Error creating scene:", error);
@@ -478,6 +659,16 @@ ${content.substring(0, 8000)}
     } catch (error) {
       console.error("Error updating scene:", error);
       res.status(500).json({ error: "Failed to update scene" });
+    }
+  });
+
+  app.delete("/api/scenes/:id", async (req, res) => {
+    try {
+      await storage.deleteScene(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting scene:", error);
+      res.status(500).json({ error: "Failed to delete scene" });
     }
   });
 
@@ -1123,119 +1314,7 @@ ${content.substring(0, 8000)}
       const activeScript = scripts.find(s => s.isActive);
       console.log(`[Call Sheet] Active script found: ${activeScript ? 'Yes' : 'No'}, content length: ${activeScript?.content?.length || 0}`);
       
-      // 核心修复：从剧本原文中提取场次内容
-      // 解析函数：从剧本文本中提取指定场次的内容
-      const extractSceneContentFromScript = (scriptContent: string, sceneNum: number): { 
-        title: string | null; 
-        location: string | null; 
-        timeOfDay: string | null; 
-        description: string | null; 
-        dialogue: string | null; 
-        action: string | null; 
-      } => {
-        if (!scriptContent) {
-          console.log(`[Scene Extract] No script content available for scene ${sceneNum}`);
-          return { title: null, location: null, timeOfDay: null, description: null, dialogue: null, action: null };
-        }
-        
-        console.log(`[Scene Extract] Attempting to extract scene ${sceneNum} from script (${scriptContent.length} chars)`);
-        
-        // 匹配场次标题行的模式，支持多种格式：
-        // 第1场, 1-1, 1.1, 场次1 等
-        const scenePatterns = [
-          // 最常见：匹配 "第X场" 格式 (如 "第1场 医院走廊 日 内")
-          new RegExp(`(?:^|[\\n\\r])\\s*(第\\s*${sceneNum}\\s*[场集次][^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*第\\s*[一二三四五六七八九十百\\d]+\\s*[场集次]|[\\n\\r]\\s*\\d+[-.]\\d+\\s|$)`, 'i'),
-          // 匹配 "X-Y" 或 "X.Y" 格式 (如 1-1, 4-8, 4.1)
-          new RegExp(`(?:^|[\\n\\r])\\s*(${sceneNum}[-.]\\d+[^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*\\d+[-.]\\d+\\s|[\\n\\r]\\s*第[一二三四五六七八九十百\\d]+[场集]|$)`, 'i'),
-          // 匹配纯 "场次X" 格式
-          new RegExp(`(?:^|[\\n\\r])\\s*(场次\\s*${sceneNum}[^\\n\\r]*)([\\s\\S]*?)(?=[\\n\\r]\\s*场次\\s*\\d+|[\\n\\r]\\s*第\\d+场|$)`, 'i'),
-        ];
-        
-        let matchedContent = '';
-        let matchedTitle = '';
-        
-        for (let i = 0; i < scenePatterns.length; i++) {
-          const pattern = scenePatterns[i];
-          const match = scriptContent.match(pattern);
-          if (match) {
-            matchedTitle = match[1]?.trim() || '';
-            matchedContent = match[2]?.trim() || '';
-            console.log(`[Scene Extract] Pattern ${i + 1} matched for scene ${sceneNum}: title="${matchedTitle.substring(0, 50)}..."`);
-            break;
-          }
-        }
-        
-        if (!matchedContent && !matchedTitle) {
-          console.log(`[Scene Extract] No match found for scene ${sceneNum}`);
-          return { title: null, location: null, timeOfDay: null, description: null, dialogue: null, action: null };
-        }
-        
-        console.log(`[Scene Extract] Found content for scene ${sceneNum}: ${matchedContent.length} chars`);
-        
-        // 解析时间和地点（通常在标题行中）
-        let location: string | null = null;
-        let timeOfDay: string | null = null;
-        
-        // 匹配地点（通常在标题中，如 "医院走廊"，"秦天家"）
-        const locationMatch = matchedTitle.match(/([^\d\s年月日夜内外]+(?:家|院|室|厅|房|街|道|楼|场|店|局|处|所|馆|园|村|镇|城|区|河边|别墅|走廊|书房|卧室|办公室)[^\s]*)/);
-        if (locationMatch) {
-          location = locationMatch[1];
-        }
-        
-        // 匹配时间（日、夜、黄昏等）
-        const timeMatch = matchedTitle.match(/(日|夜|黄昏|清晨|傍晚|午后|凌晨)/);
-        if (timeMatch) {
-          timeOfDay = timeMatch[1];
-        }
-        
-        // 分离对白和动作描述
-        const lines = matchedContent.split('\n');
-        const dialogueLines: string[] = [];
-        const actionLines: string[] = [];
-        const descriptionLines: string[] = [];
-        
-        let currentSection = 'description';
-        
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          if (!trimmedLine) continue;
-          
-          // 判断是对白还是动作
-          // 对白通常格式：角色名：对白内容 或 角色名（VO）：对白
-          if (/^[^\s△▲●○◆◇【】\[\]]+[:：]/.test(trimmedLine) || /\(VO\)|（VO）/.test(trimmedLine)) {
-            dialogueLines.push(trimmedLine);
-            currentSection = 'dialogue';
-          } 
-          // 动作描述通常以 △ 或 ▲ 开头
-          else if (/^[△▲]/.test(trimmedLine)) {
-            actionLines.push(trimmedLine.replace(/^[△▲]\s*/, ''));
-            currentSection = 'action';
-          }
-          // 人物行
-          else if (/^人物[:：]/.test(trimmedLine)) {
-            descriptionLines.push(trimmedLine);
-          }
-          // 其他内容归入描述
-          else {
-            if (currentSection === 'dialogue' && dialogueLines.length > 0) {
-              // 可能是对白的延续
-              dialogueLines.push(trimmedLine);
-            } else {
-              descriptionLines.push(trimmedLine);
-            }
-          }
-        }
-        
-        return {
-          title: matchedTitle || null,
-          location,
-          timeOfDay,
-          description: descriptionLines.length > 0 ? descriptionLines.join('\n') : null,
-          dialogue: dialogueLines.length > 0 ? dialogueLines.join('\n') : null,
-          action: actionLines.length > 0 ? actionLines.join('\n') : null,
-        };
-      };
-
+      // Use the standalone extractSceneContentFromScript function
       for (const sceneNum of sceneNumbers) {
         // 首先从剧本原文提取场次内容
         let scriptExtractedContent = { title: null as string | null, location: null as string | null, timeOfDay: null as string | null, description: null as string | null, dialogue: null as string | null, action: null as string | null };

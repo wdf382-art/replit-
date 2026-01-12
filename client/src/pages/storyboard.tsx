@@ -18,6 +18,7 @@ import {
   Check,
   FileText,
   ClipboardList,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,17 @@ export default function StoryboardPage() {
   const [newSceneTitle, setNewSceneTitle] = useState("");
   const [isCreatingScene, setIsCreatingScene] = useState(false);
   const [selectedCallSheetId, setSelectedCallSheetId] = useState<string | null>(null);
+  const [scenePreview, setScenePreview] = useState<{
+    found: boolean;
+    message: string;
+    title: string | null;
+    location: string | null;
+    timeOfDay: string | null;
+    description: string | null;
+    dialogue: string | null;
+    action: string | null;
+  } | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -176,6 +188,27 @@ export default function StoryboardPage() {
     onError: () => {
       toast({
         title: "更新失败",
+        description: "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteSceneMutation = useMutation({
+    mutationFn: async (sceneId: string) => {
+      return apiRequest("DELETE", `/api/scenes/${sceneId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject?.id] });
+      setSelectedScene(null);
+      toast({
+        title: "删除成功",
+        description: "场次已删除",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "删除失败",
         description: "请稍后重试",
         variant: "destructive",
       });
@@ -460,11 +493,27 @@ export default function StoryboardPage() {
                   } ${scene.isInCallSheet ? "border-primary ring-1 ring-primary" : ""}`}
                   data-testid={`scene-item-${scene.id}`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm">场次 {scene.sceneNumber}</span>
-                    {scene.isInCallSheet && !scene.description && !scene.dialogue && !scene.action && (
-                      <Badge variant="default" className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm transition-all">识别中</Badge>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {scene.isInCallSheet && !scene.description && !scene.dialogue && !scene.action && (
+                        <Badge variant="default" className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm transition-all">识别中</Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("确定要删除这个场次吗？")) {
+                            deleteSceneMutation.mutate(scene.id);
+                          }
+                        }}
+                        data-testid={`button-delete-scene-${scene.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                     {scene.title}
@@ -995,32 +1044,121 @@ export default function StoryboardPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showCreateSceneDialog} onOpenChange={setShowCreateSceneDialog}>
-        <DialogContent>
+      <Dialog open={showCreateSceneDialog} onOpenChange={(open) => {
+        setShowCreateSceneDialog(open);
+        if (!open) {
+          setScenePreview(null);
+          setNewSceneNumber("");
+          setNewSceneTitle("");
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>手动添加场次</DialogTitle>
             <DialogDescription>
-              手动输入场次号和标题，直接为该场次设计分镜。
+              输入场次号后系统将自动从剧本中提取相关内容（如有）。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">场次号</label>
-              <Input 
-                type="number" 
-                placeholder="例如: 1" 
-                value={newSceneNumber}
-                onChange={(e) => setNewSceneNumber(e.target.value)}
-              />
+              <div className="flex gap-2">
+                <Input 
+                  type="number" 
+                  placeholder="例如: 1" 
+                  value={newSceneNumber}
+                  onChange={(e) => setNewSceneNumber(e.target.value)}
+                  data-testid="input-scene-number"
+                />
+                <Button 
+                  variant="outline" 
+                  disabled={!newSceneNumber || !currentProject?.id || isLoadingPreview}
+                  onClick={async () => {
+                    if (!currentProject?.id || !newSceneNumber) return;
+                    setIsLoadingPreview(true);
+                    try {
+                      const result = await apiRequest("POST", "/api/scenes/preview", {
+                        projectId: currentProject.id,
+                        sceneNumber: parseInt(newSceneNumber),
+                      });
+                      setScenePreview(result);
+                      if (result.found && result.title) {
+                        setNewSceneTitle(result.title);
+                      }
+                    } catch (error) {
+                      toast({ title: "预览失败", description: "请稍后重试", variant: "destructive" });
+                    } finally {
+                      setIsLoadingPreview(false);
+                    }
+                  }}
+                  data-testid="button-preview-script"
+                >
+                  {isLoadingPreview ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                  预览剧本
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">场次标题</label>
               <Input 
-                placeholder="例如: 医院走廊" 
+                placeholder="例如: 医院走廊 / Hospital Corridor (支持中英文)"
                 value={newSceneTitle}
                 onChange={(e) => setNewSceneTitle(e.target.value)}
+                data-testid="input-scene-title"
               />
             </div>
+            
+            {scenePreview && (
+              <div className="border rounded-md p-4 bg-muted/30 space-y-3">
+                <div className="flex items-center gap-2">
+                  {scenePreview.found ? (
+                    <Badge variant="default" className="bg-green-500">已找到</Badge>
+                  ) : (
+                    <Badge variant="secondary">未找到</Badge>
+                  )}
+                  <span className="text-sm text-muted-foreground">{scenePreview.message}</span>
+                </div>
+                
+                {scenePreview.found && (
+                  <div className="grid gap-3 text-sm">
+                    {(scenePreview.location || scenePreview.timeOfDay) && (
+                      <div className="flex gap-4">
+                        {scenePreview.location && (
+                          <div>
+                            <span className="text-muted-foreground">地点：</span>
+                            <span className="font-medium">{scenePreview.location}</span>
+                          </div>
+                        )}
+                        {scenePreview.timeOfDay && (
+                          <div>
+                            <span className="text-muted-foreground">时间：</span>
+                            <span className="font-medium">{scenePreview.timeOfDay}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {scenePreview.description && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">场景描述</p>
+                        <p className="text-sm line-clamp-3 bg-background p-2 rounded">{scenePreview.description}</p>
+                      </div>
+                    )}
+                    {scenePreview.dialogue && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">对白</p>
+                        <p className="text-sm line-clamp-3 bg-background p-2 rounded italic">{scenePreview.dialogue}</p>
+                      </div>
+                    )}
+                    {scenePreview.action && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">动作</p>
+                        <p className="text-sm line-clamp-3 bg-background p-2 rounded">{scenePreview.action}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateSceneDialog(false)}>取消</Button>
@@ -1041,13 +1179,15 @@ export default function StoryboardPage() {
                   setShowCreateSceneDialog(false);
                   setNewSceneNumber("");
                   setNewSceneTitle("");
-                  toast({ title: "场次添加成功", description: "现在可以为该场次生成分镜了" });
+                  setScenePreview(null);
+                  toast({ title: "场次添加成功", description: scenePreview?.found ? "已自动关联剧本内容" : "现在可以为该场次生成分镜了" });
                 } catch (error) {
                   toast({ title: "添加失败", description: "请稍后重试", variant: "destructive" });
                 } finally {
                   setIsCreatingScene(false);
                 }
               }}
+              data-testid="button-confirm-create-scene"
             >
               {isCreatingScene ? "创建中..." : "确定添加"}
             </Button>
