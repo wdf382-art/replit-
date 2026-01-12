@@ -123,7 +123,17 @@ export default function StoryboardPage() {
   });
 
   const { data: shots, isLoading: shotsLoading } = useQuery<Shot[]>({
-    queryKey: ["/api/shots", selectedScene?.id],
+    queryKey: ["/api/shots", selectedScene?.id, selectedDirectorStyle],
+    queryFn: async () => {
+      if (!selectedScene?.id) return [];
+      const params = new URLSearchParams({ sceneId: selectedScene.id });
+      if (selectedDirectorStyle) {
+        params.append("directorStyle", selectedDirectorStyle);
+      }
+      const res = await fetch(`/api/shots?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch shots");
+      return res.json();
+    },
     enabled: !!selectedScene?.id,
   });
 
@@ -1495,35 +1505,59 @@ export default function StoryboardPage() {
                 </div>
               </div>
               
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  场景描述
-                </h3>
-                <div className="p-4 border rounded-md bg-background">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene?.description}</p>
+              {selectedScene?.scriptContent && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    完整剧本原文
+                  </h3>
+                  <div className="p-4 border rounded-md bg-muted/30 max-h-64 overflow-y-auto">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap font-mono">{selectedScene.scriptContent}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4" />
-                  动作
-                </h3>
-                <div className="p-4 border rounded-md bg-background">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene?.action}</p>
+              {selectedScene?.description && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    场景描述
+                  </h3>
+                  <div className="p-4 border rounded-md bg-background">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene.description}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  对白
-                </h3>
-                <div className="p-4 border rounded-md bg-background italic">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene?.dialogue}</p>
+              {selectedScene?.action && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4" />
+                    动作
+                  </h3>
+                  <div className="p-4 border rounded-md bg-background">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene.action}</p>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {selectedScene?.dialogue && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    对白
+                  </h3>
+                  <div className="p-4 border rounded-md bg-background italic">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedScene.dialogue}</p>
+                  </div>
+                </div>
+              )}
+
+              {!selectedScene?.scriptContent && !selectedScene?.description && !selectedScene?.dialogue && !selectedScene?.action && (
+                <div className="p-4 border rounded-md bg-muted/30 text-center text-muted-foreground">
+                  <p className="text-sm">暂无剧本内容，请在剧本页面上传或编辑剧本后重新同步场次信息。</p>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="mt-4 flex-shrink-0">

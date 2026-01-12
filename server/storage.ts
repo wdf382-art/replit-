@@ -70,7 +70,7 @@ export interface IStorage {
   updateScene(id: string, scene: Partial<InsertScene>): Promise<Scene | undefined>;
   deleteScene(id: string): Promise<void>;
 
-  getShots(sceneId: string): Promise<Shot[]>;
+  getShots(sceneId: string, directorStyle?: string): Promise<Shot[]>;
   getShot(id: string): Promise<Shot | undefined>;
   createShot(shot: InsertShot): Promise<Shot>;
   updateShot(id: string, shot: Partial<InsertShot>): Promise<Shot | undefined>;
@@ -226,11 +226,15 @@ export class DatabaseStorage implements IStorage {
     await db.delete(scenes).where(eq(scenes.id, id));
   }
 
-  async getShots(sceneId: string): Promise<Shot[]> {
+  async getShots(sceneId: string, directorStyle?: string): Promise<Shot[]> {
+    const conditions = [eq(shots.sceneId, sceneId), eq(shots.isActive, true)];
+    if (directorStyle) {
+      conditions.push(eq(shots.directorStyle, directorStyle));
+    }
     return db
       .select()
       .from(shots)
-      .where(and(eq(shots.sceneId, sceneId), eq(shots.isActive, true)))
+      .where(and(...conditions))
       .orderBy(asc(shots.shotNumber));
   }
 
@@ -738,9 +742,9 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async getShots(sceneId: string): Promise<Shot[]> {
+  async getShots(sceneId: string, directorStyle?: string): Promise<Shot[]> {
     return Array.from(this.shots.values())
-      .filter((s) => s.sceneId === sceneId && s.isActive)
+      .filter((s) => s.sceneId === sceneId && s.isActive && (!directorStyle || s.directorStyle === directorStyle))
       .sort((a, b) => a.shotNumber - b.shotNumber);
   }
 

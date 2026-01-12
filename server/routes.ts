@@ -885,10 +885,11 @@ export async function registerRoutes(
   app.get("/api/shots", async (req, res) => {
     try {
       const sceneId = req.query.sceneId as string;
+      const directorStyle = req.query.directorStyle as string | undefined;
       if (!sceneId) {
         return res.status(400).json({ error: "sceneId is required" });
       }
-      const shots = await storage.getShots(sceneId);
+      const shots = await storage.getShots(sceneId, directorStyle);
       res.json(shots);
     } catch (error) {
       console.error("Error fetching shots:", error);
