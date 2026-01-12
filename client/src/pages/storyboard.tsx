@@ -1435,12 +1435,12 @@ export default function StoryboardPage() {
       </Dialog>
 
       <Dialog open={showSceneDetails} onOpenChange={setShowSceneDetails}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>场次详情: {selectedScene?.sceneNumber}</DialogTitle>
             <DialogDescription>{selectedScene?.title}</DialogDescription>
           </DialogHeader>
-          <ScrollArea className="flex-1 mt-4 pr-4">
+          <div className="flex-1 min-h-0 overflow-y-auto mt-4 pr-2">
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-muted/50 rounded-md">
@@ -1483,8 +1483,8 @@ export default function StoryboardPage() {
                 </div>
               </div>
             </div>
-          </ScrollArea>
-          <DialogFooter className="mt-4">
+          </div>
+          <DialogFooter className="mt-4 flex-shrink-0">
             <Button onClick={() => setShowSceneDetails(false)}>关闭</Button>
             <Button variant="outline" onClick={() => {
               setShowSceneDetails(false);
