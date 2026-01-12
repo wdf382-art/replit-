@@ -1,14 +1,15 @@
 import type { Express, Request, Response } from "express";
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+import { openai } from "./client";
 
 export function registerImageRoutes(app: Express): void {
   app.post("/api/generate-image", async (req: Request, res: Response) => {
     try {
+      if (!openai) {
+        return res.status(503).json({ 
+          error: "Image generation service is not configured. Please set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY." 
+        });
+      }
+      
       const { prompt, aspectRatio = "16:9" } = req.body;
 
       if (!prompt) {

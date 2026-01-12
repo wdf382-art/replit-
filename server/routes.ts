@@ -6,6 +6,7 @@ import mammoth from "mammoth";
 import * as pdfParse from "pdf-parse";
 import { storage } from "./storage";
 import { openai } from "./replit_integrations/image/client";
+import { registerImageRoutes } from "./replit_integrations/image";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -239,6 +240,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  registerImageRoutes(app);
   
   app.get("/api/projects", async (req, res) => {
     try {
