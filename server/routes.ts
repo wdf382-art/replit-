@@ -482,71 +482,123 @@ export async function registerRoutes(
         isActive: true,
       });
 
-      if (extractScenes === "true") {
-        try {
-          const extractPrompt = `你是一位专业的编剧助理。请分析以下剧本内容，提取所有场次和角色信息。
-
-剧本内容：
-${content.substring(0, 8000)}
-
-请以JSON格式返回：
-{
-  "scenes": [
-    {
-      "sceneNumber": 1,
-      "title": "场次标题",
-      "location": "地点",
-      "timeOfDay": "日/夜",
-      "description": "场景描述",
-      "dialogue": "主要对白",
-      "action": "动作描写"
-    }
-  ],
-  "characters": [
-    {
-      "name": "角色名",
-      "description": "角色描述"
-    }
-  ]
-}`;
-
-          const response = await openai.chat.completions.create({
-            model: "gpt-5",
-            messages: [{ role: "user", content: extractPrompt }],
-            response_format: { type: "json_object" },
-            max_completion_tokens: 4096,
-          });
-
-          const extractedContent = response.choices[0]?.message?.content || "{}";
-          const extracted = safeParseJSON(extractedContent, ScriptGenerationSchema, "script");
-
-          for (const scene of extracted.scenes) {
-            await storage.createScene({
-              projectId: actualProjectId,
-              scriptId: script.id,
-              sceneNumber: scene.sceneNumber,
-              title: scene.title,
-              location: scene.location,
-              timeOfDay: scene.timeOfDay,
-              description: scene.description,
-              dialogue: scene.dialogue,
-              action: scene.action,
-            });
+      // 自动提取所有场次 - 使用正则表达式从剧本中识别场次标记
+      const autoExtractedSceneNumbers: number[] = [];
+      
+      // 辅助函数：将中文数字转换为阿拉伯数字
+      const chineseToNumber = (str: string): number => {
+        const map: { [key: string]: number } = {
+          '零': 0, '一': 1, '二': 2, '三': 3, '四': 4,
+          '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+          '十': 10, '百': 100, '千': 1000
+        };
+        let result = 0;
+        let temp = 0;
+        for (const char of str) {
+          const val = map[char];
+          if (val === undefined) continue;
+          if (val >= 10) {
+            if (temp === 0) temp = 1;
+            result += temp * val;
+            temp = 0;
+          } else {
+            temp = val;
           }
+        }
+        return result + temp;
+      };
 
-          for (const character of extracted.characters) {
-            await storage.createCharacter({
-              projectId: actualProjectId,
-              name: character.name,
-              description: character.description,
-            });
-          }
-        } catch (extractError) {
-          console.error("Scene extraction error:", extractError);
+      // Pattern 1: 第X场 with Arabic numbers
+      const arabicPattern = /(?:^|[\n\r])\s*第\s*(\d+)\s*[场集次]/gi;
+      let match;
+      while ((match = arabicPattern.exec(content)) !== null) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && !autoExtractedSceneNumbers.includes(num)) {
+          autoExtractedSceneNumbers.push(num);
         }
       }
 
-      res.json({ script, projectId: actualProjectId, fileName: req.file.originalname });
+      // Pattern 2: 第X场 with Chinese numbers (一二三...)
+      const chinesePattern = /(?:^|[\n\r])\s*第\s*([一二三四五六七八九十百千零]+)\s*[场集次]/gi;
+      while ((match = chinesePattern.exec(content)) !== null) {
+        const num = chineseToNumber(match[1]);
+        if (num > 0 && !autoExtractedSceneNumbers.includes(num)) {
+          autoExtractedSceneNumbers.push(num);
+        }
+      }
+
+      // Pattern 3: X-Y or X.Y format (e.g., 1-1, 4-8)
+      const dashPattern = /(?:^|[\n\r])\s*(\d+)[-.](\d+)\s/gi;
+      while ((match = dashPattern.exec(content)) !== null) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && !autoExtractedSceneNumbers.includes(num)) {
+          autoExtractedSceneNumbers.push(num);
+        }
+      }
+
+      // Pattern 4: 场次X format
+      const sceneNumPattern = /(?:^|[\n\r])\s*场次\s*(\d+)/gi;
+      while ((match = sceneNumPattern.exec(content)) !== null) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && !autoExtractedSceneNumbers.includes(num)) {
+          autoExtractedSceneNumbers.push(num);
+        }
+      }
+
+      // Sort and create scenes automatically
+      autoExtractedSceneNumbers.sort((a, b) => a - b);
+      console.log(`[Script Upload] Auto-extracted ${autoExtractedSceneNumbers.length} scenes: ${autoExtractedSceneNumbers.join(', ')}`);
+
+      // 获取项目中已存在的场次，避免重复创建
+      const existingScenes = await storage.getScenes(actualProjectId);
+      const existingSceneNumbers = new Set(existingScenes.map(s => s.sceneNumber));
+
+      const createdScenes = [];
+      const updatedScenes = [];
+      for (const sceneNum of autoExtractedSceneNumbers) {
+        const extracted = extractSceneContentFromScript(content, sceneNum);
+        
+        // 检查场次是否已存在
+        const existingScene = existingScenes.find(s => s.sceneNumber === sceneNum);
+        
+        if (existingScene) {
+          // 更新已存在的场次内容
+          await storage.updateScene(existingScene.id, {
+            scriptId: script.id,
+            title: extracted.title || existingScene.title,
+            location: extracted.location || existingScene.location,
+            timeOfDay: extracted.timeOfDay || existingScene.timeOfDay,
+            description: extracted.description || existingScene.description,
+            dialogue: extracted.dialogue || existingScene.dialogue,
+            action: extracted.action || existingScene.action,
+          });
+          updatedScenes.push(existingScene);
+        } else {
+          // 创建新场次
+          const scene = await storage.createScene({
+            projectId: actualProjectId,
+            scriptId: script.id,
+            sceneNumber: sceneNum,
+            title: extracted.title || `第 ${sceneNum} 场`,
+            location: extracted.location,
+            timeOfDay: extracted.timeOfDay,
+            description: extracted.description,
+            dialogue: extracted.dialogue,
+            action: extracted.action,
+          });
+          createdScenes.push(scene);
+        }
+      }
+
+      console.log(`[Script Upload] Created ${createdScenes.length} new scenes, updated ${updatedScenes.length} existing scenes for project ${actualProjectId}`);
+
+      res.json({ 
+        script, 
+        projectId: actualProjectId, 
+        fileName: req.file.originalname,
+        extractedScenes: createdScenes.length,
+        sceneNumbers: autoExtractedSceneNumbers
+      });
     } catch (error) {
       console.error("Error uploading script:", error);
       res.status(500).json({ error: "上传失败，请重试" });
@@ -1426,19 +1478,55 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
         return result + temp;
       };
 
-      // 改进正则表达式以匹配更广泛的中文场次描述
-      // 匹配：第X场、第X集、X场、场次X、场次:X 等 (X可以是阿拉伯数字或中文数字)
-      const sceneNumberPattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])|(?:场次[:：\s]?\s*([一二三四五六七八九十百\d]+))/gi;
-      const matches = rawText.matchAll(sceneNumberPattern);
-      const sceneNumbers: number[] = [];
-      for (const match of matches) {
-        const numStr = match[1] || match[2];
-        const num = chineseToNumber(numStr);
-        if (!isNaN(num) && num > 0) {
-          sceneNumbers.push(num);
+      // 增强场次识别 - 支持多种格式
+      const sceneNumbersFound: number[] = [];
+      
+      // 格式1: "第X场", "第X集", "X场" 等 (X可以是阿拉伯数字或中文数字)
+      const chineseScenePattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])/gi;
+      for (const match of rawText.matchAll(chineseScenePattern)) {
+        const num = chineseToNumber(match[1]);
+        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+      }
+      
+      // 格式2: "场次: 1, 2, 3" 或 "场次：1、2、3" - 逗号/顿号分隔的数字列表（支持阿拉伯和中文数字）
+      const listPattern = /场次[:：\s]?\s*([^。\n]+)/gi;
+      for (const match of rawText.matchAll(listPattern)) {
+        const numberList = match[1];
+        const tokens = numberList.split(/[,，、\s]+/).filter(s => s.trim());
+        for (const token of tokens) {
+          const trimmed = token.trim();
+          if (!trimmed) continue;
+          // 尝试解析阿拉伯数字或中文数字
+          const num = chineseToNumber(trimmed);
+          if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
         }
       }
-      const uniqueSceneNumbers = [...new Set(sceneNumbers)].sort((a, b) => a - b);
+      
+      // 格式3: X-Y 或 X.Y 格式 (如 "1-1", "4-8")
+      const dashPattern = /(\d+)[-.](\d+)/g;
+      for (const match of rawText.matchAll(dashPattern)) {
+        const num = parseInt(match[1]);
+        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+      }
+      
+      // 格式4: 独立的 "场次 X" 格式
+      const standalonePattern = /场次\s*[:：]?\s*(\d+)/gi;
+      for (const match of rawText.matchAll(standalonePattern)) {
+        const num = parseInt(match[1]);
+        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+      }
+      
+      // 格式5: 中文数字列表格式 如 "一、二、三" 或 "第一、第二、第三"
+      const chineseListPattern = /[第]?([一二三四五六七八九十百]+)[、，,\s]+[第]?([一二三四五六七八九十百]+)/gi;
+      for (const match of rawText.matchAll(chineseListPattern)) {
+        const num1 = chineseToNumber(match[1]);
+        const num2 = chineseToNumber(match[2]);
+        if (!isNaN(num1) && num1 > 0) sceneNumbersFound.push(num1);
+        if (!isNaN(num2) && num2 > 0) sceneNumbersFound.push(num2);
+      }
+      
+      const uniqueSceneNumbers = [...new Set(sceneNumbersFound)].sort((a, b) => a - b);
+      console.log(`[Call Sheet Upload] Extracted scene numbers: ${uniqueSceneNumbers.join(', ')} from file: ${req.file.originalname}`);
 
       const callSheet = await storage.createCallSheet({
         projectId,
@@ -1505,23 +1593,33 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
         if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
       }
       
-      // 格式2: "场次: 1, 2, 3" 或 "场次：1、2、3" - 提取逗号/顿号分隔的数字列表
-      const listPattern = /场次[:：\s]?\s*([\d,，、\s]+)/gi;
+      // 格式2: "场次: 1, 2, 3" 或 "场次：1、2、3" - 逗号/顿号分隔的数字列表（支持阿拉伯和中文数字）
+      const listPattern = /场次[:：\s]?\s*([^。\n]+)/gi;
       for (const match of rawText.matchAll(listPattern)) {
         const numberList = match[1];
-        // 分割数字列表
-        const numbers = numberList.split(/[,，、\s]+/).filter(s => s.trim());
-        for (const numStr of numbers) {
-          const num = parseInt(numStr.trim());
+        const tokens = numberList.split(/[,，、\s]+/).filter(s => s.trim());
+        for (const token of tokens) {
+          const trimmed = token.trim();
+          if (!trimmed) continue;
+          const num = chineseToNumber(trimmed);
           if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
         }
       }
       
-      // 格式3: 独立的阿拉伯数字（如 "1-1", "2-3" 场次编号）
+      // 格式3: X-Y 或 X.Y 格式 (如 "1-1", "4-8")
       const dashPattern = /(\d+)[-.](\d+)/g;
       for (const match of rawText.matchAll(dashPattern)) {
         const num = parseInt(match[1]);
         if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+      }
+      
+      // 格式4: 中文数字列表格式 如 "一、二、三" 或 "第一、第二、第三"
+      const chineseListPattern = /[第]?([一二三四五六七八九十百]+)[、，,\s]+[第]?([一二三四五六七八九十百]+)/gi;
+      for (const match of rawText.matchAll(chineseListPattern)) {
+        const num1 = chineseToNumber(match[1]);
+        const num2 = chineseToNumber(match[2]);
+        if (!isNaN(num1) && num1 > 0) sceneNumbersFound.push(num1);
+        if (!isNaN(num2) && num2 > 0) sceneNumbersFound.push(num2);
       }
       
       const uniqueSceneNumbers = [...new Set(sceneNumbersFound)].sort((a, b) => a - b);
