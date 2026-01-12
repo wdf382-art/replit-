@@ -464,7 +464,20 @@ export default function StoryboardPage() {
           <div className="p-4 space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">选择通告单</label>
-              <Select value={selectedCallSheetId || "all"} onValueChange={(value) => setSelectedCallSheetId(value === "all" ? null : value)}>
+              <Select 
+                value={selectedCallSheetId || "all"} 
+                onValueChange={(value) => {
+                  if (value === "all") {
+                    setSelectedCallSheetId(null);
+                    // Auto-extract all scenes from script when selecting "全剧本"
+                    if (currentProject?.id && (!scenes || scenes.length === 0)) {
+                      extractAllScenesMutation.mutate(currentProject.id);
+                    }
+                  } else {
+                    setSelectedCallSheetId(value);
+                  }
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="显示所有场次" />
                 </SelectTrigger>
@@ -477,6 +490,12 @@ export default function StoryboardPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {extractAllScenesMutation.isPending && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  正在从剧本提取场次...
+                </p>
+              )}
             </div>
 
             <Button 
