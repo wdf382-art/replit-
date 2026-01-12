@@ -115,12 +115,15 @@ export const scenes = pgTable("scenes", {
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   scriptId: varchar("script_id").references(() => scripts.id, { onDelete: "set null" }),
   sceneNumber: integer("scene_number").notNull(),
+  sceneIdentifier: text("scene_identifier"), // Full scene identifier like "1-1", "2-3" etc.
+  sortOrder: integer("sort_order").notNull().default(0), // For ordering scenes
   title: text("title").notNull(),
   location: text("location"),
   timeOfDay: text("time_of_day"),
   description: text("description"),
   dialogue: text("dialogue"),
   action: text("action"),
+  scriptContent: text("script_content"), // Original script content for this scene
   duration: integer("duration"), // in seconds
   isInCallSheet: boolean("is_in_call_sheet").notNull().default(false),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),

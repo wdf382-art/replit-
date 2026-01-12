@@ -7,6 +7,12 @@ import * as pdfParse from "pdf-parse";
 import { storage } from "./storage";
 import { openai } from "./replit_integrations/image/client";
 import { registerImageRoutes } from "./replit_integrations/image";
+import { 
+  extractScenesFromScriptWithAI, 
+  matchCallSheetToScenesWithAI,
+  extractSceneIdentifiersFromCallSheet,
+  type ExtractedScene 
+} from "./ai-scene-extractor";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -667,10 +673,10 @@ export async function registerRoutes(
     }
   });
 
-  // Extract all scenes from script and create them
+  // Extract all scenes from script using AI
   app.post("/api/scenes/extract-all", async (req, res) => {
     try {
-      const { projectId } = req.body;
+      const { projectId, forceRefresh } = req.body;
       if (!projectId) {
         return res.status(400).json({ error: "projectId is required" });
       }
@@ -682,114 +688,119 @@ export async function registerRoutes(
         return res.status(400).json({ error: "没有找到活动的剧本或剧本内容为空" });
       }
 
-      // Find all scene numbers in the script - support multiple formats
-      const sceneNumbers: number[] = [];
-      
-      // Helper to convert Chinese numerals to Arabic
-      const chineseToNumber = (str: string): number => {
-        const map: { [key: string]: number } = {
-          '零': 0, '一': 1, '二': 2, '三': 3, '四': 4,
-          '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
-          '十': 10, '百': 100, '千': 1000
-        };
-        let result = 0;
-        let temp = 0;
-        for (const char of str) {
-          const val = map[char];
-          if (val === undefined) continue;
-          if (val >= 10) {
-            if (temp === 0) temp = 1;
-            result += temp * val;
-            temp = 0;
-          } else {
-            temp = val;
-          }
-        }
-        return result + temp;
-      };
-
-      // Pattern 1: 第X场 with Arabic numbers
-      const arabicPattern = /(?:^|[\n\r])\s*第\s*(\d+)\s*[场集次]/gi;
-      let match;
-      while ((match = arabicPattern.exec(activeScript.content)) !== null) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && !sceneNumbers.includes(num)) {
-          sceneNumbers.push(num);
-        }
-      }
-
-      // Pattern 2: 第X场 with Chinese numbers (一二三...)
-      const chinesePattern = /(?:^|[\n\r])\s*第\s*([一二三四五六七八九十百千零]+)\s*[场集次]/gi;
-      while ((match = chinesePattern.exec(activeScript.content)) !== null) {
-        const num = chineseToNumber(match[1]);
-        if (num > 0 && !sceneNumbers.includes(num)) {
-          sceneNumbers.push(num);
-        }
-      }
-
-      // Pattern 3: X-Y or X.Y format (e.g., 1-1, 4-8)
-      const dashPattern = /(?:^|[\n\r])\s*(\d+)[-.](\d+)\s/gi;
-      while ((match = dashPattern.exec(activeScript.content)) !== null) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && !sceneNumbers.includes(num)) {
-          sceneNumbers.push(num);
-        }
-      }
-
-      // Pattern 4: 场次X format
-      const sceneNumPattern = /(?:^|[\n\r])\s*场次\s*(\d+)/gi;
-      while ((match = sceneNumPattern.exec(activeScript.content)) !== null) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && !sceneNumbers.includes(num)) {
-          sceneNumbers.push(num);
-        }
-      }
-
-      if (sceneNumbers.length === 0) {
-        return res.status(400).json({ error: "剧本中未找到场次标记 (如: 第1场, 第一场, 1-1...)" });
-      }
-
-      // Sort scene numbers
-      sceneNumbers.sort((a, b) => a - b);
-
-      // Get existing scenes for this project
+      // Get existing scenes
       const existingScenes = await storage.getScenes(projectId);
-      const existingSceneNumbers = new Set(existingScenes.map(s => s.sceneNumber));
+      
+      // If forceRefresh is true, delete all existing scenes first
+      if (forceRefresh && existingScenes.length > 0) {
+        console.log(`[Extract All] Force refresh - deleting ${existingScenes.length} existing scenes`);
+        for (const scene of existingScenes) {
+          await storage.deleteScene(scene.id);
+        }
+      }
 
-      // Create new scenes
+      // Use AI to extract scenes
+      console.log("[Extract All] Using AI to extract scenes from script");
+      const extractedScenes = await extractScenesFromScriptWithAI(activeScript.content);
+      
+      if (extractedScenes.length === 0) {
+        return res.status(400).json({ error: "AI 未能从剧本中识别出场次，请检查剧本格式" });
+      }
+
+      // Create scenes from AI extraction
       const createdScenes = [];
-      for (const sceneNum of sceneNumbers) {
-        if (existingSceneNumbers.has(sceneNum)) {
-          continue; // Skip existing scenes
+      const existingIdentifiers = forceRefresh 
+        ? new Set<string>() 
+        : new Set(existingScenes.map(s => s.sceneIdentifier || s.title));
+
+      for (const extracted of extractedScenes) {
+        // Skip if this scene identifier already exists
+        if (existingIdentifiers.has(extracted.sceneIdentifier)) {
+          console.log(`[Extract All] Skipping existing scene: ${extracted.sceneIdentifier}`);
+          continue;
         }
 
-        const extracted = extractSceneContentFromScript(activeScript.content, sceneNum);
+        // Extract scene number from identifier for backwards compatibility
+        const sceneNumMatch = extracted.sceneIdentifier.match(/^(\d+)/);
+        const sceneNumber = sceneNumMatch ? parseInt(sceneNumMatch[1], 10) : extracted.sortOrder + 1;
         
         const scene = await storage.createScene({
           projectId,
-          sceneNumber: sceneNum,
+          sceneNumber,
+          sceneIdentifier: extracted.sceneIdentifier,
+          sortOrder: extracted.sortOrder,
           scriptId: activeScript.id,
-          title: extracted.title || `第 ${sceneNum} 场`,
+          title: extracted.title || extracted.sceneIdentifier,
           location: extracted.location,
           timeOfDay: extracted.timeOfDay,
           description: extracted.description,
           dialogue: extracted.dialogue,
           action: extracted.action,
+          scriptContent: extracted.scriptContent,
         });
         
         createdScenes.push(scene);
+        existingIdentifiers.add(extracted.sceneIdentifier);
       }
 
       res.status(201).json({ 
         message: `成功从剧本提取并创建了 ${createdScenes.length} 个场次`,
-        totalFound: sceneNumbers.length,
+        totalFound: extractedScenes.length,
         created: createdScenes.length,
-        skipped: sceneNumbers.length - createdScenes.length,
+        skipped: extractedScenes.length - createdScenes.length,
         scenes: createdScenes
       });
     } catch (error) {
       console.error("Error extracting all scenes:", error);
       res.status(500).json({ error: "Failed to extract scenes from script" });
+    }
+  });
+
+  // AI-powered call sheet scene matching
+  app.post("/api/call-sheets/match-scenes", async (req, res) => {
+    try {
+      const { projectId, callSheetText } = req.body;
+      if (!projectId || !callSheetText) {
+        return res.status(400).json({ error: "projectId and callSheetText are required" });
+      }
+
+      // Get existing scenes for the project
+      const existingScenes = await storage.getScenes(projectId);
+      if (existingScenes.length === 0) {
+        return res.status(400).json({ error: "项目中没有场次，请先从剧本提取场次" });
+      }
+
+      // Format scenes for AI matching
+      const scenesForMatching = existingScenes.map(s => ({
+        identifier: s.sceneIdentifier || s.title || `场次${s.sceneNumber}`,
+        title: s.title,
+        content: s.scriptContent || s.description || s.action || ""
+      }));
+
+      // Use AI to match call sheet references to scenes
+      const matches = await matchCallSheetToScenesWithAI(callSheetText, scenesForMatching);
+
+      // Update scenes that are matched as being in call sheet
+      const matchedSceneIds: string[] = [];
+      for (const match of matches) {
+        const matchedScene = existingScenes.find(s => 
+          s.sceneIdentifier === match.matchedSceneIdentifier ||
+          s.title === match.matchedSceneIdentifier
+        );
+        if (matchedScene) {
+          await storage.updateScene(matchedScene.id, { isInCallSheet: true });
+          matchedSceneIds.push(matchedScene.id);
+        }
+      }
+
+      res.json({
+        message: `成功匹配 ${matches.length} 个场次`,
+        matches,
+        matchedSceneIds
+      });
+    } catch (error) {
+      console.error("Error matching call sheet to scenes:", error);
+      res.status(500).json({ error: "Failed to match call sheet to scenes" });
     }
   });
 
@@ -1552,149 +1563,79 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
 
   app.post("/api/call-sheets/parse-text", async (req, res) => {
     try {
-      const { projectId, title, rawText } = req.body;
+      const { projectId, title, rawText, useAI } = req.body;
       if (!projectId || !title || !rawText) {
         return res.status(400).json({ error: "projectId, title和rawText是必需的" });
       }
 
-      // 辅助函数：将中文数字转换为阿拉伯数字
-      const chineseToNumber = (str: string): number => {
-        const chineseNums: Record<string, number> = {
-          '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
-          '零': 0, '壹': 1, '贰': 2, '叁': 3, '肆': 4, '伍': 5, '陆': 6, '柒': 7, '捌': 8, '玖': 9, '拾': 10
-        };
-        
-        if (/^\d+$/.test(str)) return parseInt(str);
-        
-        let result = 0;
-        let temp = 0;
-        for (let i = 0; i < str.length; i++) {
-          const char = str[i];
-          const val = chineseNums[char];
-          if (val === undefined) continue;
-          
-          if (val === 10) {
-            if (temp === 0) result += 10;
-            else result += temp * 10;
-            temp = 0;
-          } else {
-            temp = val;
-          }
-        }
-        return result + temp;
-      };
-
-      // 改进正则表达式以匹配更广泛的中文场次描述
-      // 匹配：第X场、第X集、X场、场次X、场次:X 等 (X可以是阿拉伯数字或中文数字)
-      // 多种场次格式解析
-      const sceneNumbersFound: number[] = [];
-      
-      // 格式1: "第X场", "X场" 等
-      const chinesePattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])/gi;
-      for (const match of rawText.matchAll(chinesePattern)) {
-        const num = chineseToNumber(match[1]);
-        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
-      }
-      
-      // 格式2: "场次: 1, 2, 3" 或 "场次：1、2、3" - 逗号/顿号分隔的数字列表（支持阿拉伯和中文数字）
-      const listPattern = /场次[:：\s]?\s*([^。\n]+)/gi;
-      for (const match of rawText.matchAll(listPattern)) {
-        const numberList = match[1];
-        const tokens = numberList.split(/[,，、\s]+/).filter(s => s.trim());
-        for (const token of tokens) {
-          const trimmed = token.trim();
-          if (!trimmed) continue;
-          const num = chineseToNumber(trimmed);
-          if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
-        }
-      }
-      
-      // 格式3: X-Y 或 X.Y 格式 (如 "1-1", "4-8")
-      const dashPattern = /(\d+)[-.](\d+)/g;
-      for (const match of rawText.matchAll(dashPattern)) {
-        const num = parseInt(match[1]);
-        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
-      }
-      
-      // 格式4: 中文数字列表格式 如 "一、二、三" 或 "第一、第二、第三"
-      const chineseListPattern = /[第]?([一二三四五六七八九十百]+)[、，,\s]+[第]?([一二三四五六七八九十百]+)/gi;
-      for (const match of rawText.matchAll(chineseListPattern)) {
-        const num1 = chineseToNumber(match[1]);
-        const num2 = chineseToNumber(match[2]);
-        if (!isNaN(num1) && num1 > 0) sceneNumbersFound.push(num1);
-        if (!isNaN(num2) && num2 > 0) sceneNumbersFound.push(num2);
-      }
-      
-      const uniqueSceneNumbers = [...new Set(sceneNumbersFound)].sort((a, b) => a - b);
-      console.log(`[Call Sheet Parse] Extracted scene numbers: ${uniqueSceneNumbers.join(', ')} from text: "${rawText.substring(0, 100)}..."`);
-
-      // 提取场次信息
-      const sceneNumbers = uniqueSceneNumbers;
-      console.log(`Extracted scene numbers: ${sceneNumbers.join(', ')} for project: ${projectId}`);
-      
-      // 关键修复：同步更新项目中的所有匹配场次
+      // 获取项目中已有的场次
       const allProjectScenes = await storage.getScenes(projectId);
-      console.log(`Found ${allProjectScenes.length} total scenes in project`);
+      console.log(`[Call Sheet Parse] Found ${allProjectScenes.length} total scenes in project`);
 
-      // 获取当前活动的剧本，用于关联 scriptId
+      // 获取当前活动的剧本
       const scripts = await storage.getScripts(projectId);
       const activeScript = scripts.find(s => s.isActive);
-      console.log(`[Call Sheet] Active script found: ${activeScript ? 'Yes' : 'No'}, content length: ${activeScript?.content?.length || 0}`);
-      
-      // Use the standalone extractSceneContentFromScript function
-      for (const sceneNum of sceneNumbers) {
-        // 首先从剧本原文提取场次内容
-        let scriptExtractedContent = { title: null as string | null, location: null as string | null, timeOfDay: null as string | null, description: null as string | null, dialogue: null as string | null, action: null as string | null };
-        if (activeScript?.content) {
-          scriptExtractedContent = extractSceneContentFromScript(activeScript.content, sceneNum);
-          console.log(`Extracted content for scene ${sceneNum}:`, scriptExtractedContent.title ? 'Found' : 'Not found');
+      console.log(`[Call Sheet] Active script found: ${activeScript ? 'Yes' : 'No'}`);
+
+      let matchedSceneIds: string[] = [];
+      let extractedIdentifiers: string[] = [];
+
+      if (useAI !== false && allProjectScenes.length > 0) {
+        // 使用 AI 智能匹配通告单到场次
+        console.log("[Call Sheet Parse] Using AI to match call sheet to scenes");
+        
+        const scenesForMatching = allProjectScenes.map(s => ({
+          identifier: s.sceneIdentifier || s.title || `场次${s.sceneNumber}`,
+          title: s.title,
+          content: s.scriptContent || s.description || s.action || ""
+        }));
+
+        const matches = await matchCallSheetToScenesWithAI(rawText, scenesForMatching);
+        
+        // 更新匹配的场次
+        for (const match of matches) {
+          const matchedScene = allProjectScenes.find(s => 
+            s.sceneIdentifier === match.matchedSceneIdentifier ||
+            s.title === match.matchedSceneIdentifier ||
+            s.title.includes(match.matchedSceneIdentifier)
+          );
+          if (matchedScene) {
+            await storage.updateScene(matchedScene.id, { isInCallSheet: true });
+            matchedSceneIds.push(matchedScene.id);
+            extractedIdentifiers.push(match.matchedSceneIdentifier);
+          }
         }
 
-        // 查找是否已存在该场次
-        let existingScene = allProjectScenes.find(s => s.sceneNumber === sceneNum);
-
-        if (existingScene) {
-          console.log(`Updating scene ${sceneNum} (ID: ${existingScene.id}) with script content`);
-          const sceneUpdate: any = { 
-            isInCallSheet: true,
-            scriptId: activeScript?.id || existingScene.scriptId 
-          };
-
-          // 从剧本中提取的内容填充到场次中
-          if (scriptExtractedContent.title) sceneUpdate.title = scriptExtractedContent.title;
-          if (scriptExtractedContent.location) sceneUpdate.location = scriptExtractedContent.location;
-          if (scriptExtractedContent.timeOfDay) sceneUpdate.timeOfDay = scriptExtractedContent.timeOfDay;
-          if (scriptExtractedContent.description) sceneUpdate.description = scriptExtractedContent.description;
-          if (scriptExtractedContent.dialogue) sceneUpdate.dialogue = scriptExtractedContent.dialogue;
-          if (scriptExtractedContent.action) sceneUpdate.action = scriptExtractedContent.action;
-          
-          await storage.updateScene(existingScene.id, sceneUpdate);
-        } else {
-          console.log(`Creating new scene ${sceneNum} with script content`);
-          await storage.createScene({
-            projectId,
-            sceneNumber: sceneNum,
-            title: scriptExtractedContent.title || `第 ${sceneNum} 场`,
-            location: scriptExtractedContent.location,
-            timeOfDay: scriptExtractedContent.timeOfDay,
-            description: scriptExtractedContent.description,
-            dialogue: scriptExtractedContent.dialogue,
-            action: scriptExtractedContent.action,
-            duration: null,
-            isInCallSheet: true,
-            scriptId: activeScript?.id || null,
-          });
+        console.log(`[Call Sheet Parse] AI matched ${matches.length} scenes`);
+      } else {
+        // 如果没有场次或禁用 AI，先用 AI 提取场次标识符
+        console.log("[Call Sheet Parse] Using AI to extract scene identifiers");
+        extractedIdentifiers = await extractSceneIdentifiersFromCallSheet(rawText);
+        
+        // 如果项目有剧本但没有场次，提示用户先提取场次
+        if (allProjectScenes.length === 0 && activeScript?.content) {
+          console.log("[Call Sheet Parse] No scenes exist, need to extract from script first");
         }
       }
+
+      // 转换为数字数组以兼容旧格式
+      const sceneNumbers = extractedIdentifiers.map(id => {
+        const match = id.match(/^(\d+)/);
+        return match ? parseInt(match[1], 10) : 0;
+      }).filter(n => n > 0);
 
       const callSheet = await storage.createCallSheet({
         projectId,
         title,
         rawText,
-        sceneNumbers,
+        sceneNumbers: [...new Set(sceneNumbers)],
       });
 
-      res.status(201).json(callSheet);
+      res.status(201).json({
+        ...callSheet,
+        matchedSceneIds,
+        extractedIdentifiers
+      });
     } catch (error) {
       console.error("Error parsing call sheet text:", error);
       res.status(500).json({ error: "Failed to parse call sheet" });
