@@ -43,9 +43,20 @@ The server includes replit_integrations modules providing:
 
 Core entities include: Users, Projects, Scripts, Scenes, Shots, Characters, PerformanceGuides, SceneAnalysis, ProductionNotes, CallSheets, ScriptVersions, and ShotVersions. Projects support multiple types (advertisement, short_video, movie, web_series, micro_film, documentary, mv) with configurable director styles and visual styles.
 
+### Automatic Scene Extraction on Script Upload
+The application automatically extracts and creates scenes when a script is uploaded:
+- **Auto-tagging**: Script upload automatically identifies and creates all scene entries from the script content
+- **Supported Formats**: 第X场 (Arabic/Chinese numbers), X-Y (episode-scene), 场次X
+- **Deduplication**: If a scene already exists, it updates the content rather than creating duplicates
+- **Content Extraction**: Automatically populates location, timeOfDay, dialogue, action from script text
+
 ### Call Sheet & Scene Content Extraction
 The application supports automated scene creation from call sheets (通告单):
-- **Call Sheet Parsing**: Supports multiple scene number formats: "场次: 1, 2, 3", "第X场", "X-Y", comma-separated lists
+- **Call Sheet Parsing**: Supports multiple scene number formats:
+  - "场次: 1, 2, 3" - comma/顿号 separated lists
+  - "场次：一、二、三" - Chinese numeral lists
+  - "第X场" - standard scene notation
+  - "X-Y" - episode-scene format
 - **Scene Content Extraction**: When call sheet identifies scene numbers, system extracts content directly from script raw text using regex patterns
 - **Extracted Fields**: location (场地), timeOfDay (日/夜), dialogue (角色对白), action (△ 动作描写)
 - **Pattern Matching**: Supports "第N场 场地 时间 内/外" format with flexible whitespace handling
