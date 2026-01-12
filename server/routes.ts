@@ -612,6 +612,132 @@ ${content.substring(0, 8000)}
     }
   });
 
+  // Extract all scenes from script and create them
+  app.post("/api/scenes/extract-all", async (req, res) => {
+    try {
+      const { projectId } = req.body;
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required" });
+      }
+
+      const scripts = await storage.getScripts(projectId);
+      const activeScript = scripts.find(s => s.isActive);
+      
+      if (!activeScript?.content) {
+        return res.status(400).json({ error: "没有找到活动的剧本或剧本内容为空" });
+      }
+
+      // Find all scene numbers in the script - support multiple formats
+      const sceneNumbers: number[] = [];
+      
+      // Helper to convert Chinese numerals to Arabic
+      const chineseToNumber = (str: string): number => {
+        const map: { [key: string]: number } = {
+          '零': 0, '一': 1, '二': 2, '三': 3, '四': 4,
+          '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+          '十': 10, '百': 100, '千': 1000
+        };
+        let result = 0;
+        let temp = 0;
+        for (const char of str) {
+          const val = map[char];
+          if (val === undefined) continue;
+          if (val >= 10) {
+            if (temp === 0) temp = 1;
+            result += temp * val;
+            temp = 0;
+          } else {
+            temp = val;
+          }
+        }
+        return result + temp;
+      };
+
+      // Pattern 1: 第X场 with Arabic numbers
+      const arabicPattern = /(?:^|[\n\r])\s*第\s*(\d+)\s*[场集次]/gi;
+      let match;
+      while ((match = arabicPattern.exec(activeScript.content)) !== null) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && !sceneNumbers.includes(num)) {
+          sceneNumbers.push(num);
+        }
+      }
+
+      // Pattern 2: 第X场 with Chinese numbers (一二三...)
+      const chinesePattern = /(?:^|[\n\r])\s*第\s*([一二三四五六七八九十百千零]+)\s*[场集次]/gi;
+      while ((match = chinesePattern.exec(activeScript.content)) !== null) {
+        const num = chineseToNumber(match[1]);
+        if (num > 0 && !sceneNumbers.includes(num)) {
+          sceneNumbers.push(num);
+        }
+      }
+
+      // Pattern 3: X-Y or X.Y format (e.g., 1-1, 4-8)
+      const dashPattern = /(?:^|[\n\r])\s*(\d+)[-.](\d+)\s/gi;
+      while ((match = dashPattern.exec(activeScript.content)) !== null) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && !sceneNumbers.includes(num)) {
+          sceneNumbers.push(num);
+        }
+      }
+
+      // Pattern 4: 场次X format
+      const sceneNumPattern = /(?:^|[\n\r])\s*场次\s*(\d+)/gi;
+      while ((match = sceneNumPattern.exec(activeScript.content)) !== null) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && !sceneNumbers.includes(num)) {
+          sceneNumbers.push(num);
+        }
+      }
+
+      if (sceneNumbers.length === 0) {
+        return res.status(400).json({ error: "剧本中未找到场次标记 (如: 第1场, 第一场, 1-1...)" });
+      }
+
+      // Sort scene numbers
+      sceneNumbers.sort((a, b) => a - b);
+
+      // Get existing scenes for this project
+      const existingScenes = await storage.getScenes(projectId);
+      const existingSceneNumbers = new Set(existingScenes.map(s => s.sceneNumber));
+
+      // Create new scenes
+      const createdScenes = [];
+      for (const sceneNum of sceneNumbers) {
+        if (existingSceneNumbers.has(sceneNum)) {
+          continue; // Skip existing scenes
+        }
+
+        const extracted = extractSceneContentFromScript(activeScript.content, sceneNum);
+        
+        const scene = await storage.createScene({
+          projectId,
+          sceneNumber: sceneNum,
+          scriptId: activeScript.id,
+          title: extracted.title || `第 ${sceneNum} 场`,
+          location: extracted.location,
+          timeOfDay: extracted.timeOfDay,
+          description: extracted.description,
+          dialogue: extracted.dialogue,
+          action: extracted.action,
+        });
+        
+        createdScenes.push(scene);
+      }
+
+      res.status(201).json({ 
+        message: `成功从剧本提取并创建了 ${createdScenes.length} 个场次`,
+        totalFound: sceneNumbers.length,
+        created: createdScenes.length,
+        skipped: sceneNumbers.length - createdScenes.length,
+        scenes: createdScenes
+      });
+    } catch (error) {
+      console.error("Error extracting all scenes:", error);
+      res.status(500).json({ error: "Failed to extract scenes from script" });
+    }
+  });
+
   app.post("/api/scenes", async (req, res) => {
     try {
       const parsed = insertSceneSchema.safeParse(req.body);

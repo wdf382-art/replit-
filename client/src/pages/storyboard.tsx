@@ -215,6 +215,26 @@ export default function StoryboardPage() {
     },
   });
 
+  const extractAllScenesMutation = useMutation({
+    mutationFn: async (projectId: string) => {
+      return apiRequest("POST", "/api/scenes/extract-all", { projectId });
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scenes", currentProject?.id] });
+      toast({
+        title: "提取成功",
+        description: data.message || `已从剧本提取 ${data.created} 个场次`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "提取失败",
+        description: error.message || "请确保剧本中包含场次标记 (如: 第1场)",
+        variant: "destructive",
+      });
+    },
+  });
+
   const { data: shotVersions } = useQuery<ShotVersion[]>({
     queryKey: ["/api/shots", editingShotId, "versions"],
     enabled: !!editingShotId,
@@ -458,6 +478,25 @@ export default function StoryboardPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <Button 
+              variant="default" 
+              className="w-full mb-2" 
+              onClick={() => {
+                if (currentProject?.id) {
+                  extractAllScenesMutation.mutate(currentProject.id);
+                }
+              }}
+              disabled={!currentProject?.id || extractAllScenesMutation.isPending}
+              data-testid="button-extract-all-scenes"
+            >
+              {extractAllScenesMutation.isPending ? (
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              从剧本提取所有场次
+            </Button>
 
             <Button 
               variant="outline" 
