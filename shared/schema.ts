@@ -28,6 +28,8 @@ export const directorStyles = [
   "steven_spielberg", 
   "christopher_nolan",
   "zhang_yimou",
+  "stanley_kubrick",
+  "james_cameron",
   "bela_tarr",
   "bi_gan",
   "wong_kar_wai",
@@ -335,6 +337,8 @@ export const directorStyleInfo: Record<DirectorStyle, { name: string; nameCN: st
   steven_spielberg: { name: "Steven Spielberg", nameCN: "史蒂文·斯皮尔伯格", traits: "情感渲染、仰拍英雄、光影运用", works: "《辛德勒的名单》《E.T.》" },
   christopher_nolan: { name: "Christopher Nolan", nameCN: "克里斯托弗·诺兰", traits: "复杂叙事、IMAX构图、实拍偏好", works: "《盗梦空间》《星际穿越》" },
   zhang_yimou: { name: "Zhang Yimou", nameCN: "张艺谋", traits: "色彩美学、对称构图、群像调度", works: "《英雄》《影》" },
+  stanley_kubrick: { name: "Stanley Kubrick", nameCN: "斯坦利·库布里克", traits: "单点透视、对称构图、古典音乐、精确控制", works: "《2001太空漫游》《闪灵》" },
+  james_cameron: { name: "James Cameron", nameCN: "詹姆斯·卡梅隆", traits: "技术创新、宏大场面、强女主、蓝橙对比", works: "《泰坦尼克号》《阿凡达》" },
   bela_tarr: { name: "Béla Tarr", nameCN: "贝拉·塔尔", traits: "超长镜头、黑白影像、缓慢节奏", works: "《都灵之马》《撒旦探戈》" },
   bi_gan: { name: "Bi Gan", nameCN: "毕赣", traits: "诗意影像、长镜头、梦境感", works: "《路边野餐》《地球最后的夜晚》" },
   wong_kar_wai: { name: "Wong Kar-wai", nameCN: "王家卫", traits: "手持摄影、抽帧、暧昧氛围", works: "《花样年华》《重庆森林》" },
@@ -349,125 +353,749 @@ export const directorStyleInfo: Record<DirectorStyle, { name: string; nameCN: st
   custom: { name: "Custom", nameCN: "自定义", traits: "用户自定义风格", works: "用户指定" },
 };
 
-// Director detailed storyboarding rules
-export const directorStyleRules: Record<DirectorStyle, {
-  shotPreferences: string;
-  cameraWork: string;
-  pacing: string;
-  composition: string;
-  signatures: string;
-}> = {
+// Rule variant types
+export type RuleVariant = "遵守" | "变化" | "打破" | "强化" | "不适用";
+
+export interface DirectorRuleVariant {
+  variant: RuleVariant;
+  description: string;
+}
+
+// Comprehensive director style rules with 8 dimensions
+export interface DirectorStyleRulesV2 {
+  // A: 景别衔接
+  ruleVariants: {
+    A1_景别过渡: DirectorRuleVariant;
+    A2_30度规则: DirectorRuleVariant;
+    A3_轴线规则: DirectorRuleVariant;
+    B1_镜头时长: DirectorRuleVariant;
+    B2_开场方式: DirectorRuleVariant;
+    B3_高潮处理: DirectorRuleVariant;
+    C1_视线匹配: DirectorRuleVariant;
+    C2_动作衔接: DirectorRuleVariant;
+    C3_情绪承接: DirectorRuleVariant;
+    D_叙事结构: DirectorRuleVariant;
+  };
+  // E: 摄影机运动
+  cameraMovement: {
+    E1_运动类型: string;
+    E2_运动节奏: string;
+    E3_运动动机: string;
+  };
+  // F: 构图
+  composition: {
+    F1_对称性: string;
+    F2_空间深度: string;
+    F3_画面重心: string;
+    F4_框架利用: string;
+  };
+  // G: 色彩
+  color: {
+    G1_色调倾向: string;
+    G2_饱和度: string;
+    G3_色彩叙事: string;
+  };
+  // H: 光线
+  lighting: {
+    H1_光源类型: string;
+    H2_光影对比: string;
+    H3_光线叙事: string;
+  };
+  // 标志性技法
+  signatures: string[];
+}
+
+// Complete 17 directors with 8 dimensions
+export const directorStyleRulesV2: Record<DirectorStyle, DirectorStyleRulesV2> = {
   quentin_tarantino: {
-    shotPreferences: "偏好中景对话镜头、脚部特写、后备箱仰拍视角、墨西哥对峙式多人构图",
-    cameraWork: "大量使用推轨跟拍、急速变焦（crash zoom）揭示、横摇对切",
-    pacing: "对话场景节奏缓慢，暴力场景突然加速，使用慢动作强化关键时刻",
-    composition: "低角度拍摄赋予角色力量感，对称构图用于对峙场景",
-    signatures: "章节式叙事、突然的暴力爆发、长段对话后的动作高潮"
+    ruleVariants: {
+      A1_景别过渡: { variant: "打破", description: "对话中景突然切脚部特写，景别跳跃制造张力" },
+      A2_30度规则: { variant: "遵守", description: "对话正反打严格遵守" },
+      A3_轴线规则: { variant: "变化", description: "墨西哥对峙场景故意跨轴增加混乱感" },
+      B1_镜头时长: { variant: "强化", description: "对话镜头极长（30秒+），暴力场景突然快切" },
+      B2_开场方式: { variant: "变化", description: "后备箱仰拍或局部特写开场" },
+      B3_高潮处理: { variant: "打破", description: "高潮前反而用长对话酝酿" },
+      C1_视线匹配: { variant: "遵守", description: "多人对峙时精确视线交叉" },
+      C2_动作衔接: { variant: "打破", description: "暴力场景跳切省略过程" },
+      C3_情绪承接: { variant: "打破", description: "章节标题硬切，情绪断裂" },
+      D_叙事结构: { variant: "打破", description: "非线性叙事，时间打乱" }
+    },
+    cameraMovement: {
+      E1_运动类型: "推轨跟拍为主、急速变焦(crash zoom)揭示、横摇对切",
+      E2_运动节奏: "对话场景稳定缓慢，暴力场景突然加速",
+      E3_运动动机: "跟随角色行走、揭示关键道具、强调脚部"
+    },
+    composition: {
+      F1_对称性: "对峙场景严格对称，单人镜头不对称",
+      F2_空间深度: "后备箱视角强调纵深，对话场景平面化",
+      F3_画面重心: "多用居中构图，强调人物力量感",
+      F4_框架利用: "后备箱框架、车窗框架、门框"
+    },
+    color: {
+      G1_色调倾向: "暖色调为主，复古胶片感",
+      G2_饱和度: "中高饱和度，鲜艳的70年代感",
+      G3_色彩叙事: "用红色强调暴力，黄色强调怀旧"
+    },
+    lighting: {
+      H1_光源类型: "人工光为主，模拟70年代电影光感",
+      H2_光影对比: "中等对比，避免过度戏剧化",
+      H3_光线叙事: "逆光剪影用于酷感角色登场"
+    },
+    signatures: ["后备箱仰拍视角", "脚部特写", "章节式叙事", "墨西哥对峙", "急速变焦", "慢动作暴力", "长段对话后的突然爆发"]
   },
+
   steven_spielberg: {
-    shotPreferences: "长镜头调度（oner）、'斯皮尔伯格脸'推镜（角色凝视画外的反应镜头）、仰拍英雄时刻",
-    cameraWork: "平滑推轨、缓慢推近面部、前景/背景深度调度",
-    pacing: "情感场景用较长镜头酝酿，高潮时用交叉剪辑加速",
-    composition: "光束穿透黑暗、剪影逆光、人物置于宏大场景前",
-    signatures: "孩童视角仰拍、家庭团聚主题、窗户/门框构图"
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "严格遵循，景别过渡流畅" },
+      A2_30度规则: { variant: "遵守", description: "经典好莱坞剪辑" },
+      A3_轴线规则: { variant: "遵守", description: "严格保持，空间清晰" },
+      B1_镜头时长: { variant: "强化", description: "情感场景长镜头推近，动作快速剪辑" },
+      B2_开场方式: { variant: "强化", description: "宏大远景建立世界观" },
+      B3_高潮处理: { variant: "强化", description: "交叉剪辑多线推向同一高潮" },
+      C1_视线匹配: { variant: "强化", description: "'斯皮尔伯格脸'推镜" },
+      C2_动作衔接: { variant: "遵守", description: "精确的动作连续性" },
+      C3_情绪承接: { variant: "强化", description: "音乐和光影强化情绪" },
+      D_叙事结构: { variant: "遵守", description: "经典三幕剧结构" }
+    },
+    cameraMovement: {
+      E1_运动类型: "平滑推轨、缓慢推近、跟拍长镜头(oner)",
+      E2_运动节奏: "稳定流畅，情感时刻缓慢推近",
+      E3_运动动机: "推近面部揭示情感、跟随角色发现奇观"
+    },
+    composition: {
+      F1_对称性: "场面调度对称，但人物构图不死板",
+      F2_空间深度: "前景/背景深度调度，纵深丰富",
+      F3_画面重心: "人物置于画面三分点或稍偏",
+      F4_框架利用: "窗户、门框、楼梯扶手"
+    },
+    color: {
+      G1_色调倾向: "根据题材变化：战争冷色、家庭暖色",
+      G2_饱和度: "中等饱和度，自然真实",
+      G3_色彩叙事: "光束穿透黑暗象征希望"
+    },
+    lighting: {
+      H1_光源类型: "混合光源，强调光束效果",
+      H2_光影对比: "高对比，丁达尔效应（光束穿透）",
+      H3_光线叙事: "光束=希望、剪影=神秘、逆光=英雄"
+    },
+    signatures: ["斯皮尔伯格脸推镜", "仰拍英雄时刻", "孩童视角", "光束穿透黑暗", "窗户/门框构图", "长镜头调度(oner)", "交叉剪辑高潮"]
   },
+
   christopher_nolan: {
-    shotPreferences: "IMAX级宏大远景、精确的平行剪辑、实拍偏好（少用CG）",
-    cameraWork: "手持摄影营造混乱感、稳定跟拍用于清晰叙事",
-    pacing: "多线叙事交叉剪辑、时间操控式剪辑节奏",
-    composition: "中心对称构图、冷色调金属质感、极简环境",
-    signatures: "时间主题、倒叙或非线性、关键信息视觉隐藏"
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "每个时空内过渡清晰" },
+      A2_30度规则: { variant: "遵守", description: "精确剪辑" },
+      A3_轴线规则: { variant: "变化", description: "跨时空剪辑，但每个时空内保持" },
+      B1_镜头时长: { variant: "变化", description: "用时长区分不同时间线" },
+      B2_开场方式: { variant: "强化", description: "IMAX宏大远景" },
+      B3_高潮处理: { variant: "强化", description: "多线交叉同时推向高潮" },
+      C1_视线匹配: { variant: "遵守", description: "精确视线匹配" },
+      C2_动作衔接: { variant: "强化", description: "实拍动作精密衔接" },
+      C3_情绪承接: { variant: "变化", description: "时间错位制造悬念" },
+      D_叙事结构: { variant: "变化", description: "非线性但逻辑严密" }
+    },
+    cameraMovement: {
+      E1_运动类型: "稳定跟拍、手持(混乱时)、IMAX航拍",
+      E2_运动节奏: "根据时间线变化，主线稳定，高潮加速",
+      E3_运动动机: "跟随角色穿越空间、揭示宏大场景"
+    },
+    composition: {
+      F1_对称性: "中心对称构图",
+      F2_空间深度: "IMAX纵深，人物渺小于环境",
+      F3_画面重心: "居中或稍偏，强调建筑感",
+      F4_框架利用: "建筑线条、旋转走廊、镜面"
+    },
+    color: {
+      G1_色调倾向: "冷色调为主，金属质感",
+      G2_饱和度: "中低饱和度，写实基调",
+      G3_色彩叙事: "不同时间线可能不同色调"
+    },
+    lighting: {
+      H1_光源类型: "实拍自然光为主，少用CG补光",
+      H2_光影对比: "中等对比，强调真实感",
+      H3_光线叙事: "黑暗=未知、光明=真相"
+    },
+    signatures: ["IMAX宏大构图", "平行剪辑多时间线", "时间主题", "实拍偏好", "冷色调金属质感", "非线性叙事", "关键信息视觉隐藏"]
   },
+
   zhang_yimou: {
-    shotPreferences: "大远景群像调度、对称俯拍、纹理特写（布料、武器、自然元素）",
-    cameraWork: "稳定横移跟随、缓慢升降机运动、静态大师镜头",
-    pacing: "慢节奏铺垫、武戏快速剪辑、情绪高潮延长",
-    composition: "强烈色彩编码（红=激情、蓝=忧郁、白=纯净）、对称构图、服装色块分区",
-    signatures: "群演编排如图案、飘动纱幔作为画面元素、自然光与人工光对比"
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "大远景→中景→特写流畅" },
+      A2_30度规则: { variant: "遵守", description: "传统剪辑法则" },
+      A3_轴线规则: { variant: "遵守", description: "武戏空间清晰" },
+      B1_镜头时长: { variant: "强化", description: "文戏极慢，武戏极快" },
+      B2_开场方式: { variant: "强化", description: "大远景群像色彩强烈" },
+      B3_高潮处理: { variant: "强化", description: "武戏高潮极快配合鼓点" },
+      C1_视线匹配: { variant: "遵守", description: "精确视线交流" },
+      C2_动作衔接: { variant: "强化", description: "武术精心编排" },
+      C3_情绪承接: { variant: "强化", description: "色彩编码情绪" },
+      D_叙事结构: { variant: "遵守", description: "传统结构用色彩区分" }
+    },
+    cameraMovement: {
+      E1_运动类型: "稳定横移、缓慢升降、静态大师镜头、俯拍航拍",
+      E2_运动节奏: "文戏缓慢庄重，武戏跟随动作加速",
+      E3_运动动机: "揭示群像阵列、跟随武术动作、俯瞰图案"
+    },
+    composition: {
+      F1_对称性: "严格对称，宫殿式构图",
+      F2_空间深度: "大纵深群像调度",
+      F3_画面重心: "居中对称",
+      F4_框架利用: "宫门、竹林、纱幔"
+    },
+    color: {
+      G1_色调倾向: "根据情绪：红=激情、蓝=忧郁、白=纯净、黑=死亡",
+      G2_饱和度: "高饱和度，色彩浓烈",
+      G3_色彩叙事: "色彩区分阵营、情绪、回忆"
+    },
+    lighting: {
+      H1_光源类型: "自然光与人工光对比，烛光、日光",
+      H2_光影对比: "高对比，戏剧化光影",
+      H3_光线叙事: "逆光剪影、光束穿透、阴影压迫"
+    },
+    signatures: ["色彩美学", "对称俯拍", "群像调度如图案", "飘动纱幔", "武术慢动作", "服装色块分区", "自然元素（水、雪、竹）"]
   },
+
+  stanley_kubrick: {
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "精确控制的景别变化" },
+      A2_30度规则: { variant: "遵守", description: "严格遵守" },
+      A3_轴线规则: { variant: "遵守", description: "严格保持对称空间" },
+      B1_镜头时长: { variant: "强化", description: "镜头普遍较长，让不安感积累" },
+      B2_开场方式: { variant: "强化", description: "对称走廊或空间开场" },
+      B3_高潮处理: { variant: "变化", description: "用视觉和音乐而非剪辑加速" },
+      C1_视线匹配: { variant: "强化", description: "'库布里克凝视'直视镜头" },
+      C2_动作衔接: { variant: "遵守", description: "精确衔接" },
+      C3_情绪承接: { variant: "强化", description: "古典音乐反差制造不安" },
+      D_叙事结构: { variant: "变化", description: "章节式结构，每章独立基调" }
+    },
+    cameraMovement: {
+      E1_运动类型: "稳定跟拍、Steadicam跟随、缓慢推轨、几乎无手持",
+      E2_运动节奏: "匀速缓慢，机械般精确",
+      E3_运动动机: "跟随角色穿越对称空间、缓慢逼近揭示恐惧"
+    },
+    composition: {
+      F1_对称性: "极度对称，标志性单点透视",
+      F2_空间深度: "单点透视强调纵深",
+      F3_画面重心: "严格居中",
+      F4_框架利用: "走廊、门洞、浴室、镜子"
+    },
+    color: {
+      G1_色调倾向: "根据题材：冷色(太空)、暖色(18世纪)、中性(现代)",
+      G2_饱和度: "中等，追求真实质感",
+      G3_色彩叙事: "红色=危险/暴力、白色=无菌/异化"
+    },
+    lighting: {
+      H1_光源类型: "自然光或烛光实拍，《巴里·林登》全烛光",
+      H2_光影对比: "根据题材：太空高对比、室内柔和",
+      H3_光线叙事: "冷白光=异化、暖光=人性、红光=危险"
+    },
+    signatures: ["单点透视对称构图", "库布里克凝视(角色低头向上直视镜头)", "Steadicam跟随", "古典音乐反差配乐", "超长走廊", "几何化空间", "精确到强迫症的构图", "冷酷的观察视角"]
+  },
+
+  james_cameron: {
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "商业电影流畅过渡" },
+      A2_30度规则: { variant: "遵守", description: "清晰的动作剪辑" },
+      A3_轴线规则: { variant: "遵守", description: "动作场景空间清晰" },
+      B1_镜头时长: { variant: "变化", description: "动作快速剪辑，情感场景较长" },
+      B2_开场方式: { variant: "强化", description: "宏大场景建立世界观" },
+      B3_高潮处理: { variant: "强化", description: "多线交叉、倒计时递进" },
+      C1_视线匹配: { variant: "遵守", description: "精确视线匹配" },
+      C2_动作衔接: { variant: "强化", description: "精密的动作编排" },
+      C3_情绪承接: { variant: "强化", description: "浪漫+动作的情绪交织" },
+      D_叙事结构: { variant: "遵守", description: "经典三幕剧+高潮递进" }
+    },
+    cameraMovement: {
+      E1_运动类型: "跟拍、升降机、水下摄影、360度环绕",
+      E2_运动节奏: "动作场景跟随动作，情感场景缓慢环绕",
+      E3_运动动机: "跟随角色穿越危险、360度环绕浪漫时刻、仰拍英雄"
+    },
+    composition: {
+      F1_对称性: "场面调度对称，但不死板",
+      F2_空间深度: "3D深度强调，前景/中景/背景丰富",
+      F3_画面重心: "人物为主，环境为衬",
+      F4_框架利用: "潜艇窗、飞船窗、门框"
+    },
+    color: {
+      G1_色调倾向: "蓝色为主(水、太空)、对比橙色(火、危险)",
+      G2_饱和度: "中高饱和度，视觉震撼",
+      G3_色彩叙事: "蓝=水/科技/未来、橙=火/危险/人性"
+    },
+    lighting: {
+      H1_光源类型: "人工光主导，强调科技感",
+      H2_光影对比: "高对比，戏剧化",
+      H3_光线叙事: "蓝色科技光、橙色火光、水下光斑"
+    },
+    signatures: ["水下摄影", "宏大特效场景", "强女主角", "浪漫与动作交织", "倒计时高潮", "3D深度构图", "蓝橙对比色", "技术创新(Steadicam、3D、动捕)", "灾难场景逃生"]
+  },
+
   bela_tarr: {
-    shotPreferences: "超长镜头（单镜可达5-10分钟）、水平线构图、远距离观察式构图",
-    cameraWork: "缓慢横向跟拍人物行走、极少剪辑、摄影机如沉默观察者",
-    pacing: "极度缓慢、让观众感受时间流逝、动作边缘剪辑",
-    composition: "地平线水平分割、灰度影像、雨水/风/泥泞作为视觉元素",
-    signatures: "存在主义凝视、日常动作的仪式化、环境声设计"
+    ruleVariants: {
+      A1_景别过渡: { variant: "打破", description: "极少剪辑，单镜头内完成景别变化" },
+      A2_30度规则: { variant: "不适用", description: "极少剪辑，规则无从应用" },
+      A3_轴线规则: { variant: "遵守", description: "长镜头内保持空间连贯" },
+      B1_镜头时长: { variant: "打破", description: "所有镜头极长（5-10分钟），无短镜头" },
+      B2_开场方式: { variant: "变化", description: "缓慢横移逐渐揭示环境" },
+      B3_高潮处理: { variant: "打破", description: "无明显高潮，节奏始终缓慢" },
+      C1_视线匹配: { variant: "变化", description: "长镜头内跟随视线移动" },
+      C2_动作衔接: { variant: "变化", description: "动作在单镜头内完整呈现" },
+      C3_情绪承接: { variant: "强化", description: "缓慢节奏让情绪自然流淌" },
+      D_叙事结构: { variant: "打破", description: "消解叙事结构，时间即内容" }
+    },
+    cameraMovement: {
+      E1_运动类型: "缓慢横向跟拍、极少升降、稳定器长镜头",
+      E2_运动节奏: "极缓慢，如沉默观察者",
+      E3_运动动机: "跟随人物行走、无目的地漫游、观察日常动作"
+    },
+    composition: {
+      F1_对称性: "不刻意对称，自然随意",
+      F2_空间深度: "水平线构图，远距离观察",
+      F3_画面重心: "人物常处于画面边缘或行走穿越",
+      F4_框架利用: "窗户、门洞、走廊"
+    },
+    color: {
+      G1_色调倾向: "纯黑白，无彩色",
+      G2_饱和度: "不适用（黑白）",
+      G3_色彩叙事: "用灰度层次表达情绪"
+    },
+    lighting: {
+      H1_光源类型: "自然光为主，阴天、雨天",
+      H2_光影对比: "低对比，灰蒙蒙质感",
+      H3_光线叙事: "阴郁光线=存在主义困境"
+    },
+    signatures: ["超长镜头（单镜5-10分钟）", "横向跟拍人物行走", "黑白影像", "雨水/风/泥泞", "存在主义凝视", "重复日常动作", "环境声主导", "消解叙事"]
   },
+
   bi_gan: {
-    shotPreferences: "梦幻长镜头、横向漂移式运动、镜面反射揭示",
-    cameraWork: "手持跟拍穿越空间、360度环绕、时空跳跃式长镜头",
-    pacing: "诗意节奏、现实与梦境交织、情绪驱动而非情节驱动",
-    composition: "霓虹光晕、雾气层叠、水面倒影",
-    signatures: "3D长镜头、诗歌画外音、时间折叠叙事"
+    ruleVariants: {
+      A1_景别过渡: { variant: "打破", description: "长镜头内景别自由流动" },
+      A2_30度规则: { variant: "变化", description: "长镜头无剪辑；剪辑处诗意跳切" },
+      A3_轴线规则: { variant: "打破", description: "梦境段落故意打破空间逻辑" },
+      B1_镜头时长: { variant: "打破", description: "长镜头为主（可达60分钟）" },
+      B2_开场方式: { variant: "变化", description: "诗意碎片式开场" },
+      B3_高潮处理: { variant: "打破", description: "情绪如梦境流动，无明确高潮" },
+      C1_视线匹配: { variant: "变化", description: "视线常望向虚空" },
+      C2_动作衔接: { variant: "打破", description: "时空跳跃，动作不连续" },
+      C3_情绪承接: { variant: "强化", description: "诗歌、音乐、光影编织情绪" },
+      D_叙事结构: { variant: "打破", description: "梦境逻辑，时间折叠" }
+    },
+    cameraMovement: {
+      E1_运动类型: "自由跟拍、升降机穿越空间、无人机航拍、手持漫游",
+      E2_运动节奏: "缓慢流动，如梦游",
+      E3_运动动机: "跟随角色穿越时空、无缝转场、揭示记忆空间"
+    },
+    composition: {
+      F1_对称性: "不刻意对称，诗意随性",
+      F2_空间深度: "多层空间叠加，3D纵深",
+      F3_画面重心: "人物常处于空间中漫游",
+      F4_框架利用: "隧道、矿洞、楼梯、镜面"
+    },
+    color: {
+      G1_色调倾向: "青绿色主调，潮湿感",
+      G2_饱和度: "中低饱和度，朦胧",
+      G3_色彩叙事: "霓虹=梦境、青绿=记忆、暖色=现实"
+    },
+    lighting: {
+      H1_光源类型: "实景光源：霓虹灯、火把、月光",
+      H2_光影对比: "低对比，朦胧光晕",
+      H3_光线叙事: "光晕=梦境边界、黑暗=记忆深处"
+    },
+    signatures: ["超长镜头（60分钟）", "3D转场", "霓虹光晕", "诗歌画外音", "镜面反射", "时空折叠", "贵州山水", "梦境与现实无缝"]
   },
+
   wong_kar_wai: {
-    shotPreferences: "肩部近景、倾斜走廊视角、抽帧（6-12fps跳帧效果）",
-    cameraWork: "手持摄影创造亲密感、慢动作强化情绪、快门拖影",
-    pacing: "拉长的凝视时刻、情绪重于情节、省略式叙事",
-    composition: "霓虹灯剪影、烟雾弥漫、框中框（门框、镜子）",
-    signatures: "重复音乐主题、画外音独白、时间跨度字幕"
+    ruleVariants: {
+      A1_景别过渡: { variant: "打破", description: "远景直接跳到极近景，跳切疏离感" },
+      A2_30度规则: { variant: "打破", description: "小于30度跳切配合抽帧" },
+      A3_轴线规则: { variant: "遵守", description: "保持轴线，用镜子制造迷宫" },
+      B1_镜头时长: { variant: "强化", description: "情感凝视镜头极长（10-15秒）" },
+      B2_开场方式: { variant: "变化", description: "人物特写或局部开场" },
+      B3_高潮处理: { variant: "打破", description: "高潮时反而放慢，慢动作留白" },
+      C1_视线匹配: { variant: "变化", description: "大量视线镜头，但不揭示对象" },
+      C2_动作衔接: { variant: "打破", description: "省略动作中段" },
+      C3_情绪承接: { variant: "强化", description: "音乐和色彩强化情绪" },
+      D_叙事结构: { variant: "打破", description: "情绪碎片化拼接" }
+    },
+    cameraMovement: {
+      E1_运动类型: "手持摄影、慢动作跟拍、快门拖影",
+      E2_运动节奏: "抽帧造成不规则节奏",
+      E3_运动动机: "贴近角色、捕捉瞬间情绪、营造亲密感"
+    },
+    composition: {
+      F1_对称性: "不对称，人物常在画面边缘",
+      F2_空间深度: "狭窄空间压缩，走廊、楼梯",
+      F3_画面重心: "人物偏离中心，留出情绪空间",
+      F4_框架利用: "门框、窗帘、镜子、玻璃反射"
+    },
+    color: {
+      G1_色调倾向: "暖色霓虹为主，红绿对比",
+      G2_饱和度: "高饱和度，浓烈色彩",
+      G3_色彩叙事: "红=欲望、绿=孤独、蓝=忧郁"
+    },
+    lighting: {
+      H1_光源类型: "霓虹灯、路灯、烟雾中的光",
+      H2_光影对比: "中高对比，剪影效果",
+      H3_光线叙事: "霓虹=都市孤独、烟雾=暧昧、逆光=神秘"
+    },
+    signatures: ["抽帧（6-12fps）", "手持摄影", "霓虹剪影", "框中框", "画外音独白", "时间字幕", "重复音乐主题", "《加州梦》式配乐"]
   },
+
   wes_anderson: {
-    shotPreferences: "严格对称构图、正面平视角度、垂直俯拍插入",
-    cameraWork: "平移横摇（pan）、精确停位、缩放揭示",
-    pacing: "章节卡分隔、均匀节奏、喜剧时机精确",
-    composition: "糖果色调调色板、居中构图、平面化空间感",
-    signatures: "书信/报纸特写插入、微缩模型感、演员直视镜头"
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "景别过渡清晰，用平移过渡" },
+      A2_30度规则: { variant: "变化", description: "偏好正面平视角度切换" },
+      A3_轴线规则: { variant: "遵守", description: "严格保持，空间几何化" },
+      B1_镜头时长: { variant: "遵守", description: "均匀节奏，喜剧时机精确" },
+      B2_开场方式: { variant: "强化", description: "对称构图书页式开场" },
+      B3_高潮处理: { variant: "变化", description: "章节卡分隔，节奏均匀" },
+      C1_视线匹配: { variant: "变化", description: "演员直视镜头打破第四面墙" },
+      C2_动作衔接: { variant: "遵守", description: "动作精确如舞台剧" },
+      C3_情绪承接: { variant: "变化", description: "章节标题和配乐转换情绪" },
+      D_叙事结构: { variant: "变化", description: "章节式叙事" }
+    },
+    cameraMovement: {
+      E1_运动类型: "平移横摇、垂直升降、几乎无手持",
+      E2_运动节奏: "匀速平滑，机械精确",
+      E3_运动动机: "揭示对称空间、横移展示场景如舞台"
+    },
+    composition: {
+      F1_对称性: "严格对称，标志性风格",
+      F2_空间深度: "平面化舞台感",
+      F3_画面重心: "严格居中",
+      F4_框架利用: "窗户格子、书架、模型屋"
+    },
+    color: {
+      G1_色调倾向: "糖果色调，粉黄蓝绿",
+      G2_饱和度: "高饱和度，人工美感",
+      G3_色彩叙事: "每部电影有专属色板"
+    },
+    lighting: {
+      H1_光源类型: "人工均匀光，无明显光源感",
+      H2_光影对比: "低对比，平光为主",
+      H3_光线叙事: "光线服务于色彩而非情绪"
+    },
+    signatures: ["严格对称构图", "糖果色调", "平移横摇", "俯拍插入镜头", "章节卡", "直视镜头", "微缩模型", "60年代流行乐"]
   },
+
   david_fincher: {
-    shotPreferences: "精确锁定机位微调、法医级细节特写、冷色调低对比度",
-    cameraWork: "CGI辅助不可能机位、缓慢推近、隐形剪辑",
-    pacing: "紧凑高效、快速交叉溶解省略时间、信息密集",
-    composition: "绿/青冷色调、暗部细节保留、几何构图",
-    signatures: "开场精心设计的信用序列、科技/数字界面、心理悬疑"
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "精确流畅" },
+      A2_30度规则: { variant: "遵守", description: "精准剪辑" },
+      A3_轴线规则: { variant: "遵守", description: "严格保持" },
+      B1_镜头时长: { variant: "变化", description: "整体紧凑，快速交叉溶解省略时间" },
+      B2_开场方式: { variant: "强化", description: "精心设计片头序列" },
+      B3_高潮处理: { variant: "遵守", description: "悬疑递进，信息逐层揭示" },
+      C1_视线匹配: { variant: "遵守", description: "精确视线匹配" },
+      C2_动作衔接: { variant: "遵守", description: "精密衔接" },
+      C3_情绪承接: { variant: "强化", description: "冷色调和暗部营造压抑" },
+      D_叙事结构: { variant: "遵守", description: "经典悬疑结构，结局反转" }
+    },
+    cameraMovement: {
+      E1_运动类型: "稳定跟拍、CG辅助不可能机位、精准推轨",
+      E2_运动节奏: "机械精确，几乎无晃动",
+      E3_运动动机: "穿越空间揭示证据、跟随角色调查"
+    },
+    composition: {
+      F1_对称性: "精准对称，强迫症级别",
+      F2_空间深度: "利用纵深引导视线到证据",
+      F3_画面重心: "居中或三分法精确",
+      F4_框架利用: "审讯室窗户、电脑屏幕、门框"
+    },
+    color: {
+      G1_色调倾向: "冷色调，青绿灰",
+      G2_饱和度: "低饱和度，压抑感",
+      G3_色彩叙事: "冷色=理性/压抑、偶尔暖色=危险信号"
+    },
+    lighting: {
+      H1_光源类型: "人工光精确控制",
+      H2_光影对比: "中高对比，暗部细节丰富",
+      H3_光线叙事: "阴影隐藏线索、光线揭示真相"
+    },
+    signatures: ["冷色调", "精准构图", "CG辅助不可能机位", "法医级细节特写", "隐形剪辑", "开场片头设计", "九宫格构图", "多次拍摄追求完美"]
   },
+
   alfonso_cuaron: {
-    shotPreferences: "沉浸式长镜头（oner）、动机驱动的摄影机运动、深焦环境叙事",
-    cameraWork: "360度手持环绕、跟拍穿越复杂空间、自然光优先",
-    pacing: "呼吸式节奏、让观众与角色同步体验时间",
-    composition: "深度调度（前景动作+背景叙事）、自然主义光影对比",
-    signatures: "单镜头动作场景、角色在真实空间中移动、声音设计沉浸感"
+    ruleVariants: {
+      A1_景别过渡: { variant: "变化", description: "长镜头内景别自由变化" },
+      A2_30度规则: { variant: "不适用", description: "长镜头为主" },
+      A3_轴线规则: { variant: "变化", description: "360度环绕但空间清晰" },
+      B1_镜头时长: { variant: "打破", description: "长镜头为主，沉浸式" },
+      B2_开场方式: { variant: "强化", description: "长镜头缓慢揭示" },
+      B3_高潮处理: { variant: "变化", description: "长镜头内完成高潮" },
+      C1_视线匹配: { variant: "变化", description: "单镜头内跟随视线" },
+      C2_动作衔接: { variant: "变化", description: "动作在单镜头内完整" },
+      C3_情绪承接: { variant: "强化", description: "呼吸式节奏同步体验" },
+      D_叙事结构: { variant: "遵守", description: "遵循结构但消解剪辑痕迹" }
+    },
+    cameraMovement: {
+      E1_运动类型: "长镜头跟拍、360度环绕、手持沉浸",
+      E2_运动节奏: "与角色呼吸同步，紧张时加速",
+      E3_运动动机: "跟随角色穿越危险、环绕揭示空间全貌"
+    },
+    composition: {
+      F1_对称性: "不刻意对称，跟随动作",
+      F2_空间深度: "深焦，前中后景同时清晰",
+      F3_画面重心: "人物为中心，环境包围",
+      F4_框架利用: "车窗、太空舱窗、水面"
+    },
+    color: {
+      G1_色调倾向: "根据题材：《地心引力》冷色、《罗马》暖色",
+      G2_饱和度: "中等，自然真实",
+      G3_色彩叙事: "色彩服务于真实感"
+    },
+    lighting: {
+      H1_光源类型: "自然光为主",
+      H2_光影对比: "自然对比，不戏剧化",
+      H3_光线叙事: "太空光=孤独、阳光=希望"
+    },
+    signatures: ["沉浸式长镜头", "360度环绕", "深焦摄影", "自然光", "动机驱动运镜", "呼吸同步节奏", "灾难中的生存"]
   },
+
   denis_villeneuve: {
-    shotPreferences: "纪念碑式大远景配中心小人物、缓慢推进、极简对白间隙",
-    cameraWork: "缓慢推轨靠近、静态凝视、航拍宏观",
-    pacing: "压迫性缓慢、沉默比对话多、氛围营造优先",
-    composition: "明暗对比（chiaroscuro）、雾气光束、负空间压迫",
-    signatures: "低频音效设计、外星/未来环境、存在主义主题"
+    ruleVariants: {
+      A1_景别过渡: { variant: "强化", description: "缓慢推进，从宏大到细节" },
+      A2_30度规则: { variant: "遵守", description: "精确剪辑" },
+      A3_轴线规则: { variant: "遵守", description: "严格保持" },
+      B1_镜头时长: { variant: "变化", description: "整体镜头较长，压迫性缓慢" },
+      B2_开场方式: { variant: "强化", description: "纪念碑式大远景" },
+      B3_高潮处理: { variant: "变化", description: "缓慢逼近，压迫感胜过速度" },
+      C1_视线匹配: { variant: "遵守", description: "精确视线匹配" },
+      C2_动作衔接: { variant: "遵守", description: "精密衔接" },
+      C3_情绪承接: { variant: "强化", description: "低频音效和雾气营造压迫" },
+      D_叙事结构: { variant: "遵守", description: "遵循结构但节奏极度克制" }
+    },
+    cameraMovement: {
+      E1_运动类型: "缓慢推轨、航拍、稳定升降",
+      E2_运动节奏: "极缓慢，压迫性逼近",
+      E3_运动动机: "揭示宏大场景、逼近未知威胁"
+    },
+    composition: {
+      F1_对称性: "对称构图，纪念碑感",
+      F2_空间深度: "极大纵深，人物渺小",
+      F3_画面重心: "居中，小人物对宏大环境",
+      F4_框架利用: "飞船舱门、沙漠地平线、雾气"
+    },
+    color: {
+      G1_色调倾向: "冷色为主，橙褐沙漠",
+      G2_饱和度: "低饱和度，荒凉感",
+      G3_色彩叙事: "冷蓝=科技、橙褐=荒漠、黑=未知"
+    },
+    lighting: {
+      H1_光源类型: "自然光+雾气散射",
+      H2_光影对比: "高对比，明暗分明",
+      H3_光线叙事: "光束穿透雾气=启示、黑暗=未知恐惧"
+    },
+    signatures: ["宏大远景", "极简对白", "明暗对比", "雾气光束", "低频音效", "压迫感氛围", "人与宏大环境的对比"]
   },
+
   park_chan_wook: {
-    shotPreferences: "巴洛克式对称构图、急速倾斜揭示（whip-tilt）、分屈光镜（split diopter）",
-    cameraWork: "精心编排的复杂运动、镜像对称机位、垂直升降",
-    pacing: "精致暴力的慢动作、复仇叙事的层层揭示",
-    composition: "红绿色彩对比张力、对称镜像角色、华丽美术设计",
-    signatures: "复仇三部曲式叙事、精心设计的暴力美学、章回体结构"
+    ruleVariants: {
+      A1_景别过渡: { variant: "变化", description: "精心编排，常用倾斜揭示" },
+      A2_30度规则: { variant: "遵守", description: "精确剪辑" },
+      A3_轴线规则: { variant: "变化", description: "用镜像对称暗示角色关系" },
+      B1_镜头时长: { variant: "变化", description: "暴力场景慢动作延长" },
+      B2_开场方式: { variant: "强化", description: "华丽构图建立风格" },
+      B3_高潮处理: { variant: "强化", description: "复仇叙事层层揭示" },
+      C1_视线匹配: { variant: "强化", description: "角色对视的张力" },
+      C2_动作衔接: { variant: "强化", description: "暴力动作如舞蹈" },
+      C3_情绪承接: { variant: "强化", description: "红绿色彩对比强化张力" },
+      D_叙事结构: { variant: "遵守", description: "复仇三部曲式叙事" }
+    },
+    cameraMovement: {
+      E1_运动类型: "急速倾斜、横向跟拍、垂直升降",
+      E2_运动节奏: "变化丰富，暴力时放慢",
+      E3_运动动机: "跟随复仇行动、揭示隐藏真相"
+    },
+    composition: {
+      F1_对称性: "对称构图暗示对立关系",
+      F2_空间深度: "分屈光镜制造多层空间",
+      F3_画面重心: "精心设计的不平衡感",
+      F4_框架利用: "镜子、屏风、监狱栏杆"
+    },
+    color: {
+      G1_色调倾向: "红绿对比为主",
+      G2_饱和度: "高饱和度，浓烈",
+      G3_色彩叙事: "红=暴力/欲望、绿=病态/嫉妒"
+    },
+    lighting: {
+      H1_光源类型: "人工光精心设计",
+      H2_光影对比: "高对比，戏剧化",
+      H3_光线叙事: "阴影=秘密、光=暴露"
+    },
+    signatures: ["对称构图", "急速倾斜", "分屈光镜", "红绿色彩对比", "精致暴力", "章回体叙事", "复仇主题", "走廊打斗长镜头"]
   },
+
   hirokazu_koreeda: {
-    shotPreferences: "平视静态中景、自然光室内、日常细节枕头镜头（pillow shots）",
-    cameraWork: "固定机位观察、极少运动、不打扰式拍摄",
-    pacing: "生活化节奏、情感慢慢渗透、克制的高潮",
-    composition: "餐桌对话构图、窗户自然光、家庭空间",
-    signatures: "家庭题材、食物场景、孩童视角"
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "自然流畅" },
+      A2_30度规则: { variant: "遵守", description: "传统剪辑" },
+      A3_轴线规则: { variant: "遵守", description: "严格保持" },
+      B1_镜头时长: { variant: "变化", description: "整体较长，生活化节奏" },
+      B2_开场方式: { variant: "变化", description: "日常细节开场（枕头镜头）" },
+      B3_高潮处理: { variant: "打破", description: "情感高潮极度克制" },
+      C1_视线匹配: { variant: "遵守", description: "自然视线交流" },
+      C2_动作衔接: { variant: "遵守", description: "日常动作自然连续" },
+      C3_情绪承接: { variant: "强化", description: "情绪慢慢渗透，不过度渲染" },
+      D_叙事结构: { variant: "变化", description: "生活化叙事，结构松散" }
+    },
+    cameraMovement: {
+      E1_运动类型: "固定机位为主、轻微手持、极少运动",
+      E2_运动节奏: "静态观察，偶尔跟随",
+      E3_运动动机: "观察日常生活、不干预角色"
+    },
+    composition: {
+      F1_对称性: "不刻意对称，自然随意",
+      F2_空间深度: "家庭空间的亲密感",
+      F3_画面重心: "人物自然分布",
+      F4_框架利用: "餐桌、厨房、走廊"
+    },
+    color: {
+      G1_色调倾向: "暖色调，温馨感",
+      G2_饱和度: "中等，自然真实",
+      G3_色彩叙事: "色彩服务于真实感"
+    },
+    lighting: {
+      H1_光源类型: "自然光为主",
+      H2_光影对比: "低对比，柔和",
+      H3_光线叙事: "阳光=家庭温暖、阴天=淡淡忧伤"
+    },
+    signatures: ["自然光", "餐桌场景", "枕头镜头", "孩童视角", "食物特写", "克制情感", "日常对话", "非专业演员即兴"]
   },
+
   hou_hsiao_hsien: {
-    shotPreferences: "远距离固定远景、负空间前景遮挡、环境声桥接",
-    cameraWork: "几乎不动的摄影机、远距离观察、自然发生式调度",
-    pacing: "极度留白、动作边缘剪辑、省略式叙事",
-    composition: "前景遮挡物（门框、树枝）、深远空间感、自然光",
-    signatures: "历史题材、台湾在地性、沉默多于对话"
+    ruleVariants: {
+      A1_景别过渡: { variant: "打破", description: "极少剪辑，单镜头固定景别" },
+      A2_30度规则: { variant: "不适用", description: "极少剪辑" },
+      A3_轴线规则: { variant: "遵守", description: "固定机位保持空间连贯" },
+      B1_镜头时长: { variant: "打破", description: "全部长镜头，固定观察" },
+      B2_开场方式: { variant: "变化", description: "远距离观察，前景遮挡" },
+      B3_高潮处理: { variant: "打破", description: "无明显高潮，边缘剪辑" },
+      C1_视线匹配: { variant: "变化", description: "远距离观察，不强调匹配" },
+      C2_动作衔接: { variant: "打破", description: "省略式剪辑，只留片段" },
+      C3_情绪承接: { variant: "强化", description: "环境声和留白营造情绪" },
+      D_叙事结构: { variant: "打破", description: "省略式叙事，大量留白" }
+    },
+    cameraMovement: {
+      E1_运动类型: "固定机位为主、极少运动",
+      E2_运动节奏: "静止观察",
+      E3_运动动机: "作为旁观者观察生活"
+    },
+    composition: {
+      F1_对称性: "不刻意对称",
+      F2_空间深度: "多层空间，前景遮挡",
+      F3_画面重心: "人物常在画面边缘或被遮挡",
+      F4_框架利用: "门框、窗户、树木、纱帘"
+    },
+    color: {
+      G1_色调倾向: "自然色调，根据年代变化",
+      G2_饱和度: "中等，自然",
+      G3_色彩叙事: "色彩服务于时代感"
+    },
+    lighting: {
+      H1_光源类型: "自然光为主",
+      H2_光影对比: "自然对比",
+      H3_光线叙事: "光线表达时间流逝"
+    },
+    signatures: ["固定远景", "前景遮挡", "负空间", "环境声桥接", "留白", "省略式剪辑", "边缘剪辑", "历史感"]
   },
+
   tsai_ming_liang: {
-    shotPreferences: "超长静态镜头（单镜可5分钟以上）、建筑框架孤立人物、只用现场声",
-    cameraWork: "完全静止凝视、不打扰观察、时间即内容",
-    pacing: "挑战观众耐心的缓慢、硬切转场、无过渡",
-    composition: "都市疏离空间、雨水/水元素、人物渺小于空间",
-    signatures: "极简对白、身体性表演、城市异化主题"
+    ruleVariants: {
+      A1_景别过渡: { variant: "打破", description: "几乎无景别变化，单镜头固定" },
+      A2_30度规则: { variant: "不适用", description: "极少剪辑" },
+      A3_轴线规则: { variant: "遵守", description: "固定机位凝视" },
+      B1_镜头时长: { variant: "打破", description: "所有镜头极长（5分钟+）" },
+      B2_开场方式: { variant: "变化", description: "建筑框架孤立人物" },
+      B3_高潮处理: { variant: "打破", description: "无高潮，时间即内容" },
+      C1_视线匹配: { variant: "打破", description: "不使用传统视线匹配" },
+      C2_动作衔接: { variant: "打破", description: "硬切转场，无过渡" },
+      C3_情绪承接: { variant: "变化", description: "只用现场声，情绪自然发生" },
+      D_叙事结构: { variant: "打破", description: "消解叙事结构" }
+    },
+    cameraMovement: {
+      E1_运动类型: "固定机位凝视、几乎无运动",
+      E2_运动节奏: "静止",
+      E3_运动动机: "作为凝视者观察孤独"
+    },
+    composition: {
+      F1_对称性: "建筑几何化",
+      F2_空间深度: "建筑空间的压迫感",
+      F3_画面重心: "人物孤立于空间中央或边缘",
+      F4_框架利用: "建筑框架、走廊、楼梯、废墟"
+    },
+    color: {
+      G1_色调倾向: "冷灰色调为主",
+      G2_饱和度: "低饱和度，荒凉",
+      G3_色彩叙事: "灰色=都市疏离"
+    },
+    lighting: {
+      H1_光源类型: "自然光、日光灯",
+      H2_光影对比: "低对比，平淡",
+      H3_光线叙事: "日光灯=都市异化"
+    },
+    signatures: ["超长静态镜头", "建筑框架", "只用现场声", "雨水/水元素", "硬切", "都市疏离", "极少对白", "身体展示", "时间即内容"]
   },
+
   custom: {
-    shotPreferences: "根据用户描述确定",
-    cameraWork: "根据用户描述确定",
-    pacing: "根据用户描述确定",
-    composition: "根据用户描述确定",
-    signatures: "根据用户描述确定"
+    ruleVariants: {
+      A1_景别过渡: { variant: "遵守", description: "根据用户描述确定" },
+      A2_30度规则: { variant: "遵守", description: "根据用户描述确定" },
+      A3_轴线规则: { variant: "遵守", description: "根据用户描述确定" },
+      B1_镜头时长: { variant: "遵守", description: "根据用户描述确定" },
+      B2_开场方式: { variant: "遵守", description: "根据用户描述确定" },
+      B3_高潮处理: { variant: "遵守", description: "根据用户描述确定" },
+      C1_视线匹配: { variant: "遵守", description: "根据用户描述确定" },
+      C2_动作衔接: { variant: "遵守", description: "根据用户描述确定" },
+      C3_情绪承接: { variant: "遵守", description: "根据用户描述确定" },
+      D_叙事结构: { variant: "遵守", description: "根据用户描述确定" }
+    },
+    cameraMovement: {
+      E1_运动类型: "根据用户描述确定",
+      E2_运动节奏: "根据用户描述确定",
+      E3_运动动机: "根据用户描述确定"
+    },
+    composition: {
+      F1_对称性: "根据用户描述确定",
+      F2_空间深度: "根据用户描述确定",
+      F3_画面重心: "根据用户描述确定",
+      F4_框架利用: "根据用户描述确定"
+    },
+    color: {
+      G1_色调倾向: "根据用户描述确定",
+      G2_饱和度: "根据用户描述确定",
+      G3_色彩叙事: "根据用户描述确定"
+    },
+    lighting: {
+      H1_光源类型: "根据用户描述确定",
+      H2_光影对比: "根据用户描述确定",
+      H3_光线叙事: "根据用户描述确定"
+    },
+    signatures: ["根据用户描述确定"]
+  }
+};
+
+// Universal cinematography rules (基础分镜法则)
+export const universalCinematographyRules = {
+  A_景别衔接: {
+    A1_循序渐进: "景别变化应有过渡（远→全→中→近→特），避免跳跃过大",
+    A2_30度规则: "相邻镜头机位变化至少30度，避免跳切感",
+    A3_轴线规则: "保持180度轴线，确保空间方向连贯"
+  },
+  B_节奏控制: {
+    B1_长短搭配: "激烈场景短镜头（2-3秒），抒情场景长镜头（5-8秒）",
+    B2_开场建立: "第一镜通常是环境交代（远景或全景）",
+    B3_高潮递进: "情绪高潮前镜头加快、景别收紧"
+  },
+  C_视觉引导: {
+    C1_视线匹配: "角色看向画外→下一镜展示视线方向",
+    C2_动作衔接: "动作在前镜开始，后镜接续",
+    C3_情绪承接: "相邻镜头氛围有逻辑过渡"
+  },
+  D_叙事结构: {
+    D1_起: "建立场景空间和人物位置",
+    D2_承: "展开叙事，推进情节",
+    D3_转: "情绪或事件转折点",
+    D4_合: "场景收尾，留有余韵"
   }
 };
 

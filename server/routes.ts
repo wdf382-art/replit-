@@ -39,7 +39,8 @@ import {
   insertProductionNotesSchema,
   insertCallSheetSchema,
   directorStyleInfo,
-  directorStyleRules,
+  directorStyleRulesV2,
+  universalCinematographyRules,
   visualStyleInfo,
   shotTypeInfo,
   cameraAngleInfo,
@@ -941,27 +942,56 @@ export async function registerRoutes(
         : `${visual!.nameCN}`;
 
       const directorRules = !isCustomDirector 
-        ? directorStyleRules[directorStyle as DirectorStyle]
+        ? directorStyleRulesV2[directorStyle as DirectorStyle]
         : null;
+
+      const buildRuleVariantsSection = (rules: typeof directorRules) => {
+        if (!rules) return "";
+        const rv = rules.ruleVariants;
+        return `### 对通用规则的处理方式
+| 规则 | 处理 | 说明 |
+|------|------|------|
+| A1 景别过渡 | ${rv.A1_景别过渡.variant} | ${rv.A1_景别过渡.description} |
+| A2 30度规则 | ${rv.A2_30度规则.variant} | ${rv.A2_30度规则.description} |
+| A3 轴线规则 | ${rv.A3_轴线规则.variant} | ${rv.A3_轴线规则.description} |
+| B1 镜头时长 | ${rv.B1_镜头时长.variant} | ${rv.B1_镜头时长.description} |
+| B2 开场方式 | ${rv.B2_开场方式.variant} | ${rv.B2_开场方式.description} |
+| B3 高潮处理 | ${rv.B3_高潮处理.variant} | ${rv.B3_高潮处理.description} |
+| C1 视线匹配 | ${rv.C1_视线匹配.variant} | ${rv.C1_视线匹配.description} |
+| C2 动作衔接 | ${rv.C2_动作衔接.variant} | ${rv.C2_动作衔接.description} |
+| C3 情绪承接 | ${rv.C3_情绪承接.variant} | ${rv.C3_情绪承接.description} |
+| D 叙事结构 | ${rv.D_叙事结构.variant} | ${rv.D_叙事结构.description} |`;
+      };
 
       const directorRulesSection = isCustomDirector 
         ? `\n## 导演专属分镜策略\n根据用户自定义风格：${customDirectorStyle}\n请据此设计符合该风格的镜头语言。`
         : `\n## 导演专属分镜策略（${director!.nameCN}）
 
-### 景别与镜头偏好
-${directorRules!.shotPreferences}
+${buildRuleVariantsSection(directorRules)}
 
-### 摄影机运动
-${directorRules!.cameraWork}
+### 摄影机运动 (E)
+- 运动类型：${directorRules!.cameraMovement.E1_运动类型}
+- 运动节奏：${directorRules!.cameraMovement.E2_运动节奏}
+- 运动动机：${directorRules!.cameraMovement.E3_运动动机}
 
-### 节奏控制
-${directorRules!.pacing}
+### 构图风格 (F)
+- 对称性：${directorRules!.composition.F1_对称性}
+- 空间深度：${directorRules!.composition.F2_空间深度}
+- 画面重心：${directorRules!.composition.F3_画面重心}
+- 框架利用：${directorRules!.composition.F4_框架利用}
 
-### 构图风格
-${directorRules!.composition}
+### 色彩风格 (G)
+- 色调倾向：${directorRules!.color.G1_色调倾向}
+- 饱和度：${directorRules!.color.G2_饱和度}
+- 色彩叙事：${directorRules!.color.G3_色彩叙事}
+
+### 光线风格 (H)
+- 光源类型：${directorRules!.lighting.H1_光源类型}
+- 光影对比：${directorRules!.lighting.H2_光影对比}
+- 光线叙事：${directorRules!.lighting.H3_光线叙事}
 
 ### 标志性技法
-${directorRules!.signatures}`;
+${directorRules!.signatures.map(s => `- ${s}`).join('\n')}`;
 
       const sceneContentLength = (scene.description?.length || 0) + (scene.dialogue?.length || 0) + (scene.action?.length || 0) + ((scene as any).scriptContent?.length || 0);
       const estimatedMinutes = Math.max(0.5, sceneContentLength / 300);
