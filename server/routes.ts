@@ -1968,38 +1968,59 @@ ${scenes.map(s => `第${s.sceneNumber}场 - ${s.title} | 地点：${s.location |
 【已识别的角色】
 ${characters.map(c => `${c.name}: ${c.description || "暂无描述"}`).join("\n") || "暂无角色信息"}
 
-请分析并返回JSON格式数据，包含：
+请分析并严格按照以下JSON格式返回（注意：字段名必须用英文camelCase，数值必须是数字不是字符串）：
 
-1. characterArcs - 每个角色的人物弧光分析
-   - characterId: 角色ID（如果已知）或"unknown"
-   - characterName: 角色名
-   - arcDescription: 完整的人物弧光描述
-   - startState: 故事开始时的状态
-   - endState: 故事结束时的状态
-   - turningPoints: 关键转折点（sceneNumber + description）
-   - emotionByScene: 每场的情绪状态和强度(0-100)
-
-2. relationships - 角色间的关系网络
-   - character1Name, character2Name
-   - relationshipType: 关系类型
-   - conflictPoints: 冲突点列表
-   - evolutionDescription: 关系演变描述
-
-3. emotionMap - 全剧情绪地图
-   - 每场的整体情绪、强度、是否为关键场次
-
-4. keyScenes - 关键场次编号列表
-
-5. overallTheme - 全剧主题总结
-
-返回JSON格式：
 {
-  "characterArcs": [...],
-  "relationships": [...],
-  "emotionMap": [...],
-  "keyScenes": [...],
-  "overallTheme": "..."
-}`;
+  "characterArcs": [
+    {
+      "characterId": "unknown",
+      "characterName": "角色真实名字",
+      "arcDescription": "这个角色在全剧中的完整人物弧光描述，例如：从自卑懦弱到找到自信的成长历程",
+      "startState": "故事开始时的人物状态，例如：一个沉默寡言、逃避责任的普通职员",
+      "endState": "故事结束时的人物状态，例如：敢于面对过去、承担责任的成熟男人",
+      "turningPoints": [
+        {"sceneNumber": 3, "description": "第一个转折点的描述"},
+        {"sceneNumber": 8, "description": "第二个转折点的描述"}
+      ],
+      "emotionByScene": [
+        {"sceneNumber": 1, "emotion": "压抑", "intensity": 40},
+        {"sceneNumber": 2, "emotion": "紧张", "intensity": 60}
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "character1Name": "角色A的名字",
+      "character2Name": "角色B的名字",
+      "relationshipType": "父子/夫妻/朋友/对手等",
+      "conflictPoints": ["第一个冲突点", "第二个冲突点"],
+      "evolutionDescription": "两人关系在剧中如何演变"
+    }
+  ],
+  "emotionMap": [
+    {
+      "sceneNumber": 1,
+      "overallEmotion": "这场戏的整体情绪氛围",
+      "intensity": 45,
+      "isKeyScene": false
+    },
+    {
+      "sceneNumber": 5,
+      "overallEmotion": "高潮场次的情绪氛围",
+      "intensity": 90,
+      "isKeyScene": true
+    }
+  ],
+  "keyScenes": [5, 12, 18],
+  "overallTheme": "全剧的核心主题，例如：关于父子和解与自我救赎的故事"
+}
+
+【重要】
+- characterArcs必须为每个主要角色生成，至少包含剧中有对白的所有角色
+- emotionByScene的intensity是0-100的数字
+- emotionMap的intensity也是0-100的数字
+- keyScenes是场次编号的数字数组
+- 请根据实际剧本内容填写真实分析，不要使用示例中的占位文字`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-5",
