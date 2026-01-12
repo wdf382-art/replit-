@@ -18,6 +18,19 @@ export interface ExtractedScene {
   characters: string[];
 }
 
+interface AISceneResponse {
+  sceneIdentifier: string;
+  title: string;
+  location: string | null;
+  timeOfDay: string | null;
+  description: string | null;
+  dialogue: string | null;
+  action: string | null;
+  characters: string[];
+  startLine: number;
+  endLine: number;
+}
+
 export interface CallSheetSceneMatch {
   callSheetReference: string;
   matchedSceneIdentifier: string;
@@ -31,9 +44,17 @@ export async function extractScenesFromScriptWithAI(scriptContent: string): Prom
     return [];
   }
 
-  console.log(`[AI Scene Extract] Processing script with ${scriptContent.length} characters`);
+  const lines = scriptContent.split('\n');
+  const numberedScript = lines.map((line, i) => `[${i + 1}] ${line}`).join('\n');
 
-  const systemPrompt = `你是一个专业的剧本分析助手。你的任务是从剧本中识别并提取所有场次。
+  console.log(`[AI Scene Extract] Processing script with ${lines.length} lines, ${scriptContent.length} characters`);
+
+  const systemPrompt = `你是一个专业的剧本分析助手。你的任务是从剧本中识别并提取所有场次的**边界位置**。
+
+重要规则：
+1. 你必须返回每个场次的 startLine 和 endLine（行号从1开始）
+2. startLine 必须小于等于 endLine
+3. 场次的 endLine 是下一个场次的 startLine - 1，或者是剧本的最后一行
 
 剧本场次的常见格式包括但不限于：
 - "第X场" 或 "第X集"
@@ -41,26 +62,26 @@ export async function extractScenesFromScriptWithAI(scriptContent: string): Prom
 - "场次X"
 - 场景标题行通常包含：场次号、地点、时间（日/夜）、内/外
 
-请分析剧本内容，识别每个场次的：
+请分析剧本内容，对每个场次返回：
 1. sceneIdentifier: 场次标识符（保留原始格式，如 "1-1"、"第1场"）
-2. sortOrder: 排序序号（从0开始）
-3. title: 场次标题行
-4. location: 拍摄地点
-5. timeOfDay: 时间（日/夜/黄昏等）
-6. description: 场景描述
-7. dialogue: 对白内容
-8. action: 动作描述（通常以△或▲开头的行）
-9. scriptContent: 该场次的完整原文
-10. characters: 该场次出现的角色名称列表
+2. title: 场次标题行（复制原文）
+3. location: 拍摄地点（从标题行提取关键词）
+4. timeOfDay: 时间（日/夜/黄昏等）
+5. description: 可选，简短场景描述
+6. dialogue: 可选，主要对白摘要
+7. action: 可选，主要动作摘要
+8. characters: 该场次出现的角色名称列表
+9. startLine: 该场次开始的行号（包含，必填）
+10. endLine: 该场次结束的行号（包含，必填）
 
-返回 JSON 格式，包含 scenes 数组。`;
+返回 JSON 格式：{ "scenes": [...] }`;
 
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `请分析以下剧本并提取所有场次：\n\n${scriptContent}` }
+        { role: "user", content: `请分析以下剧本（每行前面的 [数字] 是行号）并提取所有场次的边界：\n\n${numberedScript}` }
       ],
       response_format: { type: "json_object" },
       temperature: 0.1,
@@ -73,10 +94,47 @@ export async function extractScenesFromScriptWithAI(scriptContent: string): Prom
     }
 
     const parsed = JSON.parse(content);
-    const scenes: ExtractedScene[] = parsed.scenes || [];
+    const aiScenes: AISceneResponse[] = parsed.scenes || [];
     
-    console.log(`[AI Scene Extract] Extracted ${scenes.length} scenes`);
-    return scenes;
+    console.log(`[AI Scene Extract] AI identified ${aiScenes.length} scenes`);
+
+    const extractedScenes: ExtractedScene[] = aiScenes
+      .filter((scene) => {
+        if (!scene.startLine || !scene.endLine) {
+          console.warn(`[AI Scene Extract] Scene "${scene.sceneIdentifier}" missing line numbers, skipping`);
+          return false;
+        }
+        if (scene.endLine < scene.startLine) {
+          console.warn(`[AI Scene Extract] Scene "${scene.sceneIdentifier}" has invalid line range (${scene.startLine}-${scene.endLine}), skipping`);
+          return false;
+        }
+        return true;
+      })
+      .map((scene, index) => {
+      const startIdx = Math.max(0, scene.startLine - 1);
+      const endIdx = Math.min(lines.length, scene.endLine);
+      
+      const sceneLines = lines.slice(startIdx, endIdx);
+      const scriptContentFromSource = sceneLines.join('\n');
+
+      console.log(`[AI Scene Extract] Scene "${scene.sceneIdentifier}": lines ${scene.startLine}-${scene.endLine}, extracted ${sceneLines.length} lines`);
+
+      return {
+        sceneIdentifier: scene.sceneIdentifier || `场次${index + 1}`,
+        sortOrder: index,
+        title: scene.title || '',
+        location: scene.location,
+        timeOfDay: scene.timeOfDay,
+        description: scene.description,
+        dialogue: scene.dialogue,
+        action: scene.action,
+        scriptContent: scriptContentFromSource,
+        characters: scene.characters || [],
+      };
+    });
+
+    console.log(`[AI Scene Extract] Extracted ${extractedScenes.length} scenes with original content`);
+    return extractedScenes;
   } catch (error) {
     console.error("[AI Scene Extract] Error:", error);
     return [];
