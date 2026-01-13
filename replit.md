@@ -69,6 +69,37 @@ The application implements version history tracking for both scripts and shots:
 - **Version Numbering**: Monotonically increasing version numbers for clear history tracking
 - **UI Integration**: Version history panels in Script Editor sidebar and Storyboard shot edit dialog
 
+### Video Storyboard System (Added 2026-01-13)
+The storyboard module supports video generation from static images using multiple AI models:
+
+**Supported Video Models:**
+- **VEO** (default): Google's video generation model
+- **可灵O1 (Kling)**: Kuaishou's video generation model
+- **既梦4.0 (Jimeng)**: ByteDance's video generation model
+
+**Architecture:**
+- **Async Job Queue** (`server/video-job-queue.ts`): Background processing with max 2 concurrent jobs
+- **Non-blocking API**: POST endpoints return immediately with job IDs
+- **Status Polling**: Frontend polls every 3 seconds when videos are generating
+- **Retry Mechanism**: 3 retries with exponential backoff for database updates
+
+**API Endpoints:**
+- `POST /api/shots/:id/generate-video` - Generate video for single shot
+- `POST /api/scenes/:id/generate-all-videos` - Batch generate videos for all shots with images
+- `GET /api/video-models/availability` - Check which video APIs are configured
+- `GET /api/video-jobs/status` - Get queue status (pending, processing counts)
+
+**Database Fields (shots table):**
+- `videoUrl`: URL of generated video
+- `videoModel`: Model used (veo/kling/jimeng)
+- `videoStatus`: Current status (pending/generating/completed/failed)
+- `videoError`: Error message if generation failed
+
+**Environment Variables:**
+- `VEO_API_KEY`: Google VEO API key
+- `KLING_ACCESS_KEY`, `KLING_SECRET_KEY`: Kling API credentials
+- `JIMENG_API_KEY`: Jimeng API key
+
 ### Design System
 The UI follows a Linear + Notion hybrid approach emphasizing information clarity and workflow efficiency. Typography uses Inter for UI and JetBrains Mono for script/code content. The app supports light/dark themes with CSS custom properties.
 
