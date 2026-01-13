@@ -39,27 +39,27 @@ const mainNavItems = [
 
 const workflowItems = [
   {
-    title: "剧本编辑",
+    title: "剧本",
     url: "/script",
     icon: FileText,
   },
   {
-    title: "表演指导",
+    title: "表演",
     url: "/performance",
     icon: Drama,
   },
   {
-    title: "智能分镜",
+    title: "分镜",
     url: "/storyboard",
     icon: Image,
   },
   {
-    title: "服化道提示",
+    title: "服化道",
     url: "/production",
     icon: Shirt,
   },
   {
-    title: "导出中心",
+    title: "导出",
     url: "/export",
     icon: Download,
   },
