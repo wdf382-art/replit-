@@ -327,6 +327,52 @@ export const insertCharacterAssetReferenceSchema = createInsertSchema(characterA
 export type InsertCharacterAssetReference = z.infer<typeof insertCharacterAssetReferenceSchema>;
 export type CharacterAssetReference = typeof characterAssetReferences.$inferSelect;
 
+// Character pose types for reference images
+export const characterPoseTypes = ["full_body", "front_face", "left_profile", "right_profile"] as const;
+export type CharacterPoseType = typeof characterPoseTypes[number];
+
+export const characterPoseTypeLabels: Record<CharacterPoseType, string> = {
+  full_body: "全身照",
+  front_face: "正脸近景",
+  left_profile: "左侧脸近景",
+  right_profile: "右侧脸近景",
+};
+
+// Character image variant status
+export const characterImageVariantStatuses = ["pending", "generating", "completed", "failed", "applied", "rejected"] as const;
+export type CharacterImageVariantStatus = typeof characterImageVariantStatuses[number];
+
+// Character image variants table (for AI-generated reference images)
+export const characterImageVariants = pgTable("character_image_variants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  characterId: varchar("character_id").notNull().references(() => characters.id, { onDelete: "cascade" }),
+  poseType: text("pose_type").notNull().$type<CharacterPoseType>(),
+  imageUrl: text("image_url"),
+  prompt: text("prompt"),
+  appearanceDescriptor: jsonb("appearance_descriptor").$type<{
+    hair?: string;
+    face?: string;
+    body?: string;
+    clothing?: string;
+    age?: string;
+    gender?: string;
+    style?: string;
+  }>(),
+  status: text("status").notNull().$type<CharacterImageVariantStatus>().default("pending"),
+  errorMessage: text("error_message"),
+  isApplied: boolean("is_applied").default(false),
+  generationBatchId: varchar("generation_batch_id"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertCharacterImageVariantSchema = createInsertSchema(characterImageVariants).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCharacterImageVariant = z.infer<typeof insertCharacterImageVariantSchema>;
+export type CharacterImageVariant = typeof characterImageVariants.$inferSelect;
+
 // Performance guides table
 export const performanceGuides = pgTable("performance_guides", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

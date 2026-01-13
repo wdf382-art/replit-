@@ -1,236 +1,77 @@
 # Film Production Assistant
 
 ## Overview
-
-A bilingual (Chinese/English) AI-powered film production assistant application designed for pre-production workflows. The app helps filmmakers with script writing, storyboard generation, performance direction, and production planning using integrated AI capabilities through OpenAI.
-
-The application follows a modular workflow structure covering the complete pre-production pipeline: idea development → script creation → scene breakdown → shot planning → performance guidance → production notes → export.
+A bilingual (Chinese/English) AI-powered film production assistant application designed for pre-production workflows. The app helps filmmakers with script writing, storyboard generation, performance direction, and production planning using integrated AI capabilities. It streamlines the pre-production pipeline from idea development to export, covering script creation, scene breakdown, shot planning, performance guidance, and production notes. The project aims to provide comprehensive AI assistance to enhance filmmaking efficiency and creativity.
 
 ## User Preferences
-
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend Architecture
+### Frontend
 - **Framework**: React 18 with TypeScript
-- **Routing**: Wouter (lightweight router)
-- **State Management**: Zustand for global app state, TanStack Query for server state
-- **UI Components**: shadcn/ui built on Radix UI primitives
-- **Styling**: Tailwind CSS with custom design tokens (CSS variables for theming)
-- **Build Tool**: Vite with React plugin
+- **Routing**: Wouter
+- **State Management**: Zustand for global state, TanStack Query for server state
+- **UI Components**: shadcn/ui (Radix UI primitives)
+- **Styling**: Tailwind CSS with custom design tokens
+- **Build Tool**: Vite
+- **UI/UX**: Linear + Notion hybrid approach, emphasizing clarity and workflow efficiency. Typography uses Inter for UI and JetBrains Mono for script/code. Supports light/dark themes.
 
-The frontend follows a page-based structure with shared components. Pages include Dashboard, Projects, Script Editor, Storyboard, Performance, Production, and Export. The sidebar navigation provides workflow-oriented access to all modules.
-
-### Backend Architecture
+### Backend
 - **Runtime**: Node.js with Express
 - **Language**: TypeScript (ESM modules)
-- **API Pattern**: RESTful JSON API under `/api/*` prefix
-- **AI Integration**: OpenAI SDK configured via Replit AI Integrations (custom base URL)
-
-The server includes replit_integrations modules providing:
-- Batch processing with rate limiting and retries
-- Chat conversation management
-- Image generation capabilities
+- **API Pattern**: RESTful JSON API under `/api/*`
+- **AI Integration**: OpenAI SDK via Replit AI Integrations, with batch processing, rate limiting, retries, chat, and image generation.
 
 ### Data Layer
-- **ORM**: Drizzle ORM with PostgreSQL dialect
-- **Database Connection**: `server/db.ts` - Drizzle connection using pg Pool
-- **Storage**: `server/storage.ts` - DatabaseStorage class implementing IStorage interface for PostgreSQL persistence
-- **Schema Location**: `shared/schema.ts` (shared between client and server)
-- **Validation**: Zod schemas generated from Drizzle schemas via drizzle-zod
-- **Migrations**: Drizzle Kit with `db:push` command
+- **ORM**: Drizzle ORM with PostgreSQL
+- **Schema Location**: `shared/schema.ts`
+- **Validation**: Zod schemas from Drizzle via drizzle-zod
+- **Core Entities**: Users, Projects, Scripts, Scenes, Shots, Characters, PerformanceGuides, SceneAnalysis, ProductionNotes, CallSheets, ScriptVersions, ShotVersions. Projects support various types (advertisement, movie, etc.) with configurable director and visual styles.
 
-Core entities include: Users, Projects, Scripts, Scenes, Shots, Characters, PerformanceGuides, SceneAnalysis, ProductionNotes, CallSheets, ScriptVersions, and ShotVersions. Projects support multiple types (advertisement, short_video, movie, web_series, micro_film, documentary, mv) with configurable director styles and visual styles.
+### Key Features
 
-### Automatic Scene Extraction on Script Upload
-The application automatically extracts and creates scenes when a script is uploaded:
-- **Auto-tagging**: Script upload automatically identifies and creates all scene entries from the script content
-- **Supported Formats**: 第X场 (Arabic/Chinese numbers), X-Y (episode-scene), 场次X
-- **Deduplication**: If a scene already exists, it updates the content rather than creating duplicates
-- **Content Extraction**: Automatically populates location, timeOfDay, dialogue, action from script text
+#### Automatic Scene & Content Extraction
+- **Script Upload**: Automatically extracts and creates scene entries from script content, supporting various formats (e.g., 第X场, X-Y, 场次X). Deduplicates existing scenes.
+- **Call Sheet Parsing**: Extracts scene content (location, timeOfDay, dialogue, action) from call sheets using regex patterns, supporting multiple scene number formats.
 
-### Call Sheet & Scene Content Extraction
-The application supports automated scene creation from call sheets (通告单):
-- **Call Sheet Parsing**: Supports multiple scene number formats:
-  - "场次: 1, 2, 3" - comma/顿号 separated lists
-  - "场次：一、二、三" - Chinese numeral lists
-  - "第X场" - standard scene notation
-  - "X-Y" - episode-scene format
-- **Scene Content Extraction**: When call sheet identifies scene numbers, system extracts content directly from script raw text using regex patterns
-- **Extracted Fields**: location (场地), timeOfDay (日/夜), dialogue (角色对白), action (△ 动作描写)
-- **Pattern Matching**: Supports "第N场 场地 时间 内/外" format with flexible whitespace handling
+#### Version Control System
+- Implements version history for scripts (`ScriptVersions`) and shots (`ShotVersions`), tracking modifications with timestamps and change descriptions.
+- Provides restore functionality and uses monotonic version numbering.
 
-### Version Control System
-The application implements version history tracking for both scripts and shots:
-- **ScriptVersions**: Tracks all modifications to script content with version numbers, timestamps, and change descriptions
-- **ShotVersions**: Tracks all modifications to shot data (description, camera settings, atmosphere, etc.)
-- **Restore Functionality**: Automatically saves current version before restoring to prevent data loss
-- **Version Numbering**: Monotonically increasing version numbers for clear history tracking
-- **UI Integration**: Version history panels in Script Editor sidebar and Storyboard shot edit dialog
+#### Video Storyboard System
+- Supports video generation from static images using VEO, 可灵O1 (Kling), and 既梦4.0 (Jimeng) AI models.
+- Features an asynchronous job queue (max 2 concurrent jobs), non-blocking API, status polling, and retry mechanisms.
+- Database fields in `shots` table track `videoUrl`, `videoModel`, `videoStatus`, and `videoError`.
 
-### Video Storyboard System (Added 2026-01-13)
-The storyboard module supports video generation from static images using multiple AI models:
+#### Character Reference System
+- **Auto-extraction**: AI analyzes scripts to extract character names, roles, and appearance descriptions, classifying roles (e.g., 男主/女主).
+- **Image References**: Allows uploading reference images for characters and managing assets (clothing, shoes, props).
+- **AI Character Image Auto-Generation**: Generates 4 reference images per character (full body, front face, left profile, right profile) based on extracted appearance details from the script. Includes a preview and approval workflow, with background processing and status tracking.
 
-**Supported Video Models:**
-- **VEO** (default): Google's video generation model
-- **可灵O1 (Kling)**: Kuaishou's video generation model
-- **既梦4.0 (Jimeng)**: ByteDance's video generation model
+#### Director Style Framework
+- Storyboard generation uses an 8-dimension director style framework, analyzing how directors handle universal cinematography rules (e.g., Shot size transitions, 30-degree rule, camera movement, composition, color, lighting) and their signature techniques.
+- Supports 17 directors (e.g., Quentin Tarantino, Steven Spielberg, Christopher Nolan, Zhang Yimou), specifying how each director varies from universal cinematography rules.
 
-**Architecture:**
-- **Async Job Queue** (`server/video-job-queue.ts`): Background processing with max 2 concurrent jobs
-- **Non-blocking API**: POST endpoints return immediately with job IDs
-- **Status Polling**: Frontend polls every 3 seconds when videos are generating
-- **Retry Mechanism**: 3 retries with exponential backoff for database updates
-
-**API Endpoints:**
-- `POST /api/shots/:id/generate-video` - Generate video for single shot
-- `POST /api/scenes/:id/generate-all-videos` - Batch generate videos for all shots with images
-- `GET /api/video-models/availability` - Check which video APIs are configured
-- `GET /api/video-jobs/status` - Get queue status (pending, processing counts)
-
-**Database Fields (shots table):**
-- `videoUrl`: URL of generated video
-- `videoModel`: Model used (veo/kling/jimeng)
-- `videoStatus`: Current status (pending/generating/completed/failed)
-- `videoError`: Error message if generation failed
-
-**Environment Variables:**
-- `VEO_API_KEY`: Google VEO API key
-- `KLING_ACCESS_KEY`, `KLING_SECRET_KEY`: Kling API credentials
-- `JIMENG_API_KEY`: Jimeng API key
-
-### Character Reference System (Added 2026-01-13)
-The performance module includes a character image reference system for maintaining consistent character appearance across storyboard shots:
-
-**Features:**
-- **Auto-extraction from Script**: AI analyzes script content to extract character names, roles, and appearance descriptions
-- **Role Type Classification**: Characters categorized as 男主/女主/反一/反二/配角/龙套/群演
-- **Image Reference Upload**: Upload reference images for each character's appearance
-- **Asset Management**: Separate asset categories for clothing (服装), shoes (鞋履), and props (道具)
-
-**UI Structure:**
-- Performance page uses Tabs to switch between "场次表演" (scene performance) and "角色形象" (character references)
-- Card-based character display with role type badges
-- Collapsible asset sections for each character
-- "从剧本提取角色" button for AI-powered character extraction
-
-**Database Tables:**
-- `characters`: Extended with imageReferenceUrl, imageReferencePrompt, roleType, isAutoExtracted
-- `characterAssetReferences`: Stores clothing/shoe/prop images linked to characters
-
-**API Endpoints:**
-- `GET /api/projects/:projectId/characters/references` - Get characters with assets
-- `POST /api/projects/:projectId/characters/extract` - AI extract characters from script
-- `POST /api/characters/:id/reference-image` - Upload character image
-- `POST /api/characters/:id/assets` - Add asset reference
-- `DELETE /api/characters/:id/assets/:assetId` - Remove asset reference
-
-### Design System
-The UI follows a Linear + Notion hybrid approach emphasizing information clarity and workflow efficiency. Typography uses Inter for UI and JetBrains Mono for script/code content. The app supports light/dark themes with CSS custom properties.
+#### Performance Guidance V2 Module
+- **Two-Phase Architecture**:
+    1. **Global Script Analysis**: Analyzes the entire script to generate character arcs, emotion maps, and relationship networks, stored in `scriptAnalysisGlobal`.
+    2. **Scene-Specific Performance Guidance**: Generates four components per scene: Scene Hook (core dramatic moment), Flatness Diagnosis (identifying and solving flat scenes), Emotional Chain (linking emotional flow between scenes), and Director Scripts (second-person guidance for characters). This phase requires global analysis to be completed first.
 
 ## External Dependencies
 
 ### AI Services
-- **OpenAI API**: Accessed through Replit AI Integrations proxy
-  - Used for text generation: script generation, storyboard descriptions, performance guidance, and production notes
-  - All AI responses validated with Zod schemas (ScriptGenerationSchema, ShotsGenerationSchema, PerformanceGuideSchema, ProductionNotesSchema) using safeParseJSON function with explicit fallbacks
-
-- **Gemini API (NANO banana pro)**: Accessed through Replit AI Integrations proxy
-  - Model: `gemini-3-pro-image-preview` (NANO banana pro)
-  - Used for storyboard image generation
-  - Client imported from `server/replit_integrations/image/client.ts`
+- **OpenAI API**: Via Replit AI Integrations for text generation (script, storyboard descriptions, performance guidance, production notes) and validation using Zod schemas.
+- **Gemini API (NANO banana pro)**: Via Replit AI Integrations (`gemini-3-pro-image-preview`) for storyboard image generation.
 
 ### Database
-- **PostgreSQL**: Required for data persistence
-  - Environment variable: `DATABASE_URL`
-  - Session storage via connect-pg-simple
+- **PostgreSQL**: For data persistence, configured via `DATABASE_URL`.
+- **Session Storage**: `connect-pg-simple`.
 
 ### Key NPM Packages
-- `drizzle-orm` / `drizzle-kit`: Database ORM and migrations
-- `@tanstack/react-query`: Server state management
-- `zustand`: Client state management
-- `openai`: AI API client
-- `p-limit` / `p-retry`: Batch processing utilities
-- `zod`: Runtime validation
-
-## Director Style Framework (Updated 2026-01-12)
-
-### Comprehensive 8-Dimension Analysis
-The storyboard generation now uses a comprehensive director style framework with 8 dimensions:
-
-**Rule Variants (A-D) - How directors handle universal cinematography rules:**
-- A1 景别过渡: Shot size transitions
-- A2 30度规则: 30-degree rule
-- A3 轴线规则: 180-degree axis rule
-- B1 镜头时长: Shot duration
-- B2 开场方式: Scene opening style
-- B3 高潮处理: Climax handling
-- C1 视线匹配: Eyeline match
-- C2 动作衔接: Action continuity
-- C3 情绪承接: Emotional continuity
-- D 叙事结构: Narrative structure
-
-**Additional Dimensions:**
-- E: 摄影机运动 (Camera Movement) - E1运动类型, E2运动节奏, E3运动动机
-- F: 构图 (Composition) - F1对称性, F2空间深度, F3画面重心, F4框架利用
-- G: 色彩 (Color) - G1色调倾向, G2饱和度, G3色彩叙事
-- H: 光线 (Lighting) - H1光源类型, H2光影对比, H3光线叙事
-- Signatures: Director's signature techniques
-
-### Supported Directors (17 total)
-1. 昆汀·塔伦蒂诺 (Quentin Tarantino)
-2. 史蒂文·斯皮尔伯格 (Steven Spielberg)
-3. 克里斯托弗·诺兰 (Christopher Nolan)
-4. 张艺谋 (Zhang Yimou)
-5. 斯坦利·库布里克 (Stanley Kubrick) - NEW
-6. 詹姆斯·卡梅隆 (James Cameron) - NEW
-7. 贝拉·塔尔 (Béla Tarr)
-8. 毕赣 (Bi Gan)
-9. 王家卫 (Wong Kar-wai)
-10. 韦斯·安德森 (Wes Anderson)
-11. 大卫·芬奇 (David Fincher)
-12. 阿方索·卡隆 (Alfonso Cuarón)
-13. 丹尼斯·维伦纽瓦 (Denis Villeneuve)
-14. 朴赞郁 (Park Chan-wook)
-15. 是枝裕和 (Hirokazu Koreeda)
-16. 侯孝贤 (Hou Hsiao-hsien)
-17. 蔡明亮 (Tsai Ming-liang)
-
-### Key Data Structures
-- `directorStyleRulesV2`: Complete 8-dimension rules for each director in `shared/schema.ts`
-- `universalCinematographyRules`: Base cinematography rules that all directors work within/around
-- Each director rule specifies variant type: 遵守(follow), 变化(modify), 打破(break), 强化(enhance), 不适用(N/A)
-
-## Performance Guidance V2 Module (Updated 2026-01-12)
-
-### Design Philosophy
-Performance guidance precedes storyboard work - "camera serves performance" (镜头为表演服务). The system must analyze the entire script (全剧分析) before generating scene-specific guidance.
-
-### Two-Phase Architecture
-1. **Global Script Analysis** (全剧分析)
-   - Analyzes complete script before any scene-specific work
-   - Generates: character arcs (人物弧光), emotion maps (情绪地图), relationship networks (关系网络)
-   - Stored in `scriptAnalysisGlobal` table with JSONB fields
-   - API: GET/POST `/api/script-analysis-global/:projectId`
-
-2. **Scene-Specific Performance Guidance** (单场表演指导)
-   - Requires global analysis to exist first
-   - Generates four components per scene:
-     - **戏点 (Scene Hook)**: Core dramatic moment with emotion curve (开场→铺垫→高潮→收尾)
-     - **平淡诊断 (Flatness Diagnosis)**: Identifies flat scenes with unlimited modification solutions
-     - **情绪承接 (Emotional Chain)**: Links previous→current→next scene emotional flow
-     - **导演讲戏稿 (Director Scripts)**: Second-person "你" guidance for each character
-   - Stored in `performanceGuidesV2` table
-   - API: GET/POST `/api/performance-guides-v2/:sceneId`
-
-### Key Data Structures (shared/schema.ts)
-- `SceneHookData`: hookDescription, hookType, hookPosition, hookTrigger, emotionCurve, beforeAfterContrast
-- `SceneDiagnosisData`: isFlatScene, flatReasons, solutions (with optional implementationSteps)
-- `EmotionalChainData`: previousScene, currentScene, nextScene emotional states with directorTip
-- `CharacterPerformanceData`: positioning, performanceLayers (surface/middle/core), directorScript segments
-
-### UI Structure (performance.tsx)
-- Left panel: Project selector + scene list navigation
-- Right panel: Scene-specific guidance with collapsible sections
-- Header buttons: "全剧分析" (global analysis) + "生成本场指导" (generate scene guidance)
+- `drizzle-orm` / `drizzle-kit`: ORM and migrations.
+- `@tanstack/react-query`: Server state management.
+- `zustand`: Client state management.
+- `openai`: AI API client.
+- `p-limit` / `p-retry`: Batch processing utilities.
+- `zod`: Runtime validation.

@@ -13,6 +13,11 @@ import {
   extractSceneIdentifiersFromCallSheet,
   type ExtractedScene 
 } from "./ai-scene-extractor";
+import {
+  initializeCharacterImageJobQueue,
+  enqueueCharacterImageJob,
+  getQueueStatus as getCharacterImageQueueStatus,
+} from "./character-image-job-queue";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -51,6 +56,9 @@ import {
   type VisualStyle,
   type AspectRatio,
   type ProjectType,
+  characterPoseTypes,
+  characterPoseTypeLabels,
+  type CharacterPoseType,
 } from "@shared/schema";
 
 const ScriptGenerationSchema = z.object({
@@ -265,6 +273,11 @@ export async function registerRoutes(
   const { initializeVideoJobQueue } = await import("./video-job-queue");
   initializeVideoJobQueue(async (shotId, updates) => {
     return storage.updateShot(shotId, updates);
+  });
+  
+  // Initialize character image job queue with storage update function
+  initializeCharacterImageJobQueue(async (variantId, updates) => {
+    return storage.updateCharacterImageVariant(variantId, updates);
   });
   
   registerImageRoutes(app);
@@ -1614,6 +1627,207 @@ ${activeScript.content}
     } catch (error) {
       console.error("Error creating character:", error);
       res.status(500).json({ error: "Failed to create character" });
+    }
+  });
+
+  // Get character image variants
+  app.get("/api/characters/:id/image-variants", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const variants = await storage.getCharacterImageVariants(id);
+      res.json(variants);
+    } catch (error) {
+      console.error("Error fetching character image variants:", error);
+      res.status(500).json({ error: "Failed to fetch character image variants" });
+    }
+  });
+
+  // Generate character images (all 4 poses)
+  app.post("/api/characters/:id/generate-images", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const character = await storage.getCharacter(id);
+      
+      if (!character) {
+        return res.status(404).json({ error: "Character not found" });
+      }
+
+      // Get project to access script for character description extraction
+      const project = await storage.getProject(character.projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      // Get scripts to extract detailed character description
+      const scripts = await storage.getScripts(character.projectId);
+      const scriptContent = scripts.map(s => s.content || "").join("\n");
+
+      // Generate appearance descriptor using AI
+      if (!openai) {
+        return res.status(500).json({ error: "OpenAI client not configured" });
+      }
+      
+      const appearancePrompt = `根据以下剧本内容，提取角色"${character.name}"的详细外貌描述。
+
+剧本内容：
+${scriptContent.substring(0, 8000)}
+
+角色名称：${character.name}
+角色描述：${character.description || "无"}
+角色类型：${character.roleType || "配角"}
+
+请分析剧本和角色描述，提取以下外貌特征。如果剧本中没有明确说明，请根据角色类型和故事背景做出合理推断。
+
+返回JSON格式：
+{
+  "hair": "发型和发色描述",
+  "face": "面部特征描述（五官、表情气质）",
+  "body": "身材体型描述",
+  "clothing": "典型服装风格描述",
+  "age": "年龄段描述",
+  "gender": "性别",
+  "style": "整体视觉风格（如：现代都市、古装、民国等）"
+}`;
+
+      const appearanceResponse = await openai.chat.completions.create({
+        model: "gpt-5",
+        messages: [{ role: "user", content: appearancePrompt }],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 1024,
+      });
+
+      const appearanceContent = appearanceResponse.choices[0]?.message?.content || "{}";
+      let appearanceDescriptor: {
+        hair?: string;
+        face?: string;
+        body?: string;
+        clothing?: string;
+        age?: string;
+        gender?: string;
+        style?: string;
+      };
+      
+      try {
+        appearanceDescriptor = JSON.parse(appearanceContent);
+      } catch {
+        appearanceDescriptor = {
+          hair: "黑色短发",
+          face: "五官端正",
+          body: "标准身材",
+          clothing: "休闲服装",
+          age: "青年",
+          gender: "未知",
+          style: "现代",
+        };
+      }
+
+      // Generate batch ID for this generation session
+      const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Clear any existing non-applied variants for this character
+      await storage.deleteCharacterImageVariantsByCharacter(id);
+
+      // Create variants for all 4 poses and enqueue generation jobs
+      const variants = [];
+      for (const poseType of characterPoseTypes) {
+        const poseLabel = characterPoseTypeLabels[poseType];
+        
+        // Build detailed prompt for each pose
+        let posePrompt = `电影角色定妆照：${character.name}，${appearanceDescriptor.gender || "角色"}，${appearanceDescriptor.age || "成年"}
+
+外貌特征：
+- 发型：${appearanceDescriptor.hair || "自然发型"}
+- 面部：${appearanceDescriptor.face || "五官端正"}
+- 身材：${appearanceDescriptor.body || "标准身材"}
+- 服装：${appearanceDescriptor.clothing || "角色服装"}
+
+风格：${appearanceDescriptor.style || "电影质感"}，专业摄影，高清画质，柔和打光，纯色背景
+
+`;
+        
+        if (poseType === "full_body") {
+          posePrompt += "全身照：从头到脚完整展示，站立姿势，正面朝向镜头";
+        } else if (poseType === "front_face") {
+          posePrompt += "正脸近景：面部特写，正面朝向镜头，眼睛直视前方";
+        } else if (poseType === "left_profile") {
+          posePrompt += "左侧脸近景：面部特写，向右转头，展示左侧面轮廓";
+        } else if (poseType === "right_profile") {
+          posePrompt += "右侧脸近景：面部特写，向左转头，展示右侧面轮廓";
+        }
+
+        const variant = await storage.createCharacterImageVariant({
+          characterId: id,
+          poseType,
+          prompt: posePrompt,
+          appearanceDescriptor,
+          status: "pending",
+          generationBatchId: batchId,
+        });
+
+        variants.push(variant);
+
+        // Enqueue the image generation job
+        enqueueCharacterImageJob(
+          variant.id,
+          id,
+          character.name,
+          poseType,
+          posePrompt,
+          batchId
+        );
+      }
+
+      res.json({
+        success: true,
+        batchId,
+        variants,
+        message: "Image generation started for all 4 poses",
+      });
+    } catch (error) {
+      console.error("Error generating character images:", error);
+      res.status(500).json({ error: "Failed to generate character images" });
+    }
+  });
+
+  // Apply character image variant (copy to main reference image)
+  app.post("/api/characters/:characterId/image-variants/:variantId/apply", async (req, res) => {
+    try {
+      const { characterId, variantId } = req.params;
+      
+      const variant = await storage.getCharacterImageVariants(characterId);
+      const targetVariant = variant.find(v => v.id === variantId);
+      
+      if (!targetVariant || !targetVariant.imageUrl) {
+        return res.status(404).json({ error: "Image variant not found or not ready" });
+      }
+
+      // Update character with the selected image
+      await storage.updateCharacter(characterId, {
+        imageReferenceUrl: targetVariant.imageUrl,
+        imageReferencePrompt: targetVariant.prompt,
+      });
+
+      // Mark this variant as applied
+      await storage.updateCharacterImageVariant(variantId, {
+        isApplied: true,
+        status: "applied",
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error applying character image variant:", error);
+      res.status(500).json({ error: "Failed to apply character image variant" });
+    }
+  });
+
+  // Get character image generation queue status
+  app.get("/api/character-image-jobs/status", async (_req, res) => {
+    try {
+      const status = getCharacterImageQueueStatus();
+      res.json(status);
+    } catch (error) {
+      console.error("Error getting character image job status:", error);
+      res.status(500).json({ error: "Failed to get job status" });
     }
   });
 

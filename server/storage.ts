@@ -7,6 +7,7 @@ import {
   shots,
   characters,
   characterAssetReferences,
+  characterImageVariants,
   performanceGuides,
   sceneAnalysis,
   productionNotes,
@@ -50,6 +51,8 @@ import type {
   PerformanceGuideV2,
   InsertPerformanceGuideV2,
   CharacterAssetType,
+  CharacterImageVariant,
+  InsertCharacterImageVariant,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -123,6 +126,13 @@ export interface IStorage {
   getCharacterAssetReferences(characterId: string, assetType?: CharacterAssetType): Promise<CharacterAssetReference[]>;
   createCharacterAssetReference(asset: InsertCharacterAssetReference): Promise<CharacterAssetReference>;
   deleteCharacterAssetReference(id: string): Promise<void>;
+
+  // Character image variants
+  getCharacterImageVariants(characterId: string): Promise<CharacterImageVariant[]>;
+  getCharacterImageVariantsByBatch(batchId: string): Promise<CharacterImageVariant[]>;
+  createCharacterImageVariant(variant: InsertCharacterImageVariant): Promise<CharacterImageVariant>;
+  updateCharacterImageVariant(id: string, updates: Partial<InsertCharacterImageVariant>): Promise<CharacterImageVariant | undefined>;
+  deleteCharacterImageVariantsByCharacter(characterId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -589,6 +599,35 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCharacterAssetReference(id: string): Promise<void> {
     await db.delete(characterAssetReferences).where(eq(characterAssetReferences.id, id));
+  }
+
+  async getCharacterImageVariants(characterId: string): Promise<CharacterImageVariant[]> {
+    return db.select().from(characterImageVariants)
+      .where(eq(characterImageVariants.characterId, characterId))
+      .orderBy(asc(characterImageVariants.createdAt));
+  }
+
+  async getCharacterImageVariantsByBatch(batchId: string): Promise<CharacterImageVariant[]> {
+    return db.select().from(characterImageVariants)
+      .where(eq(characterImageVariants.generationBatchId, batchId))
+      .orderBy(asc(characterImageVariants.createdAt));
+  }
+
+  async createCharacterImageVariant(insertVariant: InsertCharacterImageVariant): Promise<CharacterImageVariant> {
+    const result = await db.insert(characterImageVariants).values(insertVariant).returning();
+    return result[0];
+  }
+
+  async updateCharacterImageVariant(id: string, updates: Partial<InsertCharacterImageVariant>): Promise<CharacterImageVariant | undefined> {
+    const result = await db.update(characterImageVariants)
+      .set(updates)
+      .where(eq(characterImageVariants.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteCharacterImageVariantsByCharacter(characterId: string): Promise<void> {
+    await db.delete(characterImageVariants).where(eq(characterImageVariants.characterId, characterId));
   }
 }
 
@@ -1144,6 +1183,26 @@ export class MemStorage implements IStorage {
   }
 
   async deleteCharacterAssetReference(_id: string): Promise<void> {
+    // No-op for MemStorage
+  }
+
+  async getCharacterImageVariants(_characterId: string): Promise<CharacterImageVariant[]> {
+    return [];
+  }
+
+  async getCharacterImageVariantsByBatch(_batchId: string): Promise<CharacterImageVariant[]> {
+    return [];
+  }
+
+  async createCharacterImageVariant(_variant: InsertCharacterImageVariant): Promise<CharacterImageVariant> {
+    throw new Error("MemStorage does not support characterImageVariants");
+  }
+
+  async updateCharacterImageVariant(_id: string, _updates: Partial<InsertCharacterImageVariant>): Promise<CharacterImageVariant | undefined> {
+    return undefined;
+  }
+
+  async deleteCharacterImageVariantsByCharacter(_characterId: string): Promise<void> {
     // No-op for MemStorage
   }
 }

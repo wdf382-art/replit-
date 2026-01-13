@@ -46,9 +46,12 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   characterRoleTypeLabels,
   characterAssetTypeLabels,
+  characterPoseTypeLabels,
   type CharacterRoleType,
   type CharacterAssetType,
   type CharacterAssetReference,
+  type CharacterImageVariant,
+  type CharacterPoseType,
 } from "@shared/schema";
 
 interface CharacterWithAssets {
@@ -81,6 +84,8 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newCharacterName, setNewCharacterName] = useState("");
   const [newCharacterRole, setNewCharacterRole] = useState<CharacterRoleType>("supporting");
+  const [generatingCharacterId, setGeneratingCharacterId] = useState<string | null>(null);
+  const [previewCharacterId, setPreviewCharacterId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const assetInputRef = useRef<HTMLInputElement>(null);
 
@@ -205,6 +210,69 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
       });
     },
   });
+
+  const { data: imageVariants, refetch: refetchVariants } = useQuery<CharacterImageVariant[]>({
+    queryKey: ["/api/characters", previewCharacterId, "image-variants"],
+    queryFn: async () => {
+      if (!previewCharacterId) return [];
+      const res = await fetch(`/api/characters/${previewCharacterId}/image-variants`);
+      return res.json();
+    },
+    enabled: !!previewCharacterId,
+    refetchInterval: (data) => {
+      const hasGenerating = data?.state?.data?.some(v => v.status === "pending" || v.status === "generating");
+      return hasGenerating ? 3000 : false;
+    },
+  });
+
+  const generateImagesMutation = useMutation({
+    mutationFn: async (characterId: string) => {
+      return apiRequest("POST", `/api/characters/${characterId}/generate-images`, {});
+    },
+    onSuccess: (_, characterId) => {
+      setGeneratingCharacterId(null);
+      setPreviewCharacterId(characterId);
+      refetchVariants();
+      toast({
+        title: "开始生成",
+        description: "正在为角色生成4张定妆照，请稍候...",
+      });
+    },
+    onError: (error: Error) => {
+      setGeneratingCharacterId(null);
+      toast({
+        title: "生成失败",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const applyImageMutation = useMutation({
+    mutationFn: async ({ characterId, variantId }: { characterId: string; variantId: string }) => {
+      return apiRequest("POST", `/api/characters/${characterId}/image-variants/${variantId}/apply`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/characters/references`] });
+      setPreviewCharacterId(null);
+      toast({
+        title: "应用成功",
+        description: "已将选中的图片设为角色形象",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "应用失败",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleGenerateImages = (characterId: string) => {
+    setGeneratingCharacterId(characterId);
+    generateImagesMutation.mutate(characterId);
+  };
 
   const handleExtract = () => {
     setIsExtracting(true);
@@ -418,26 +486,43 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
                     onChange={(e) => handleFileUpload(e, character.id)}
                     data-testid={`input-upload-character-image-${character.id}`}
                   />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="absolute bottom-2 right-2"
-                    onClick={() => {
-                      const input = document.querySelector(`input[data-testid="input-upload-character-image-${character.id}"]`) as HTMLInputElement;
-                      input?.click();
-                    }}
-                    disabled={uploadingCharacterId === character.id}
-                    data-testid={`button-upload-character-image-${character.id}`}
-                  >
-                    {uploadingCharacterId === character.id ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4 mr-1" />
-                        {character.imageReferenceUrl ? "更换" : "上传"}
-                      </>
-                    )}
-                  </Button>
+                  <div className="absolute bottom-2 right-2 flex gap-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleGenerateImages(character.id)}
+                      disabled={generatingCharacterId === character.id}
+                      data-testid={`button-generate-character-image-${character.id}`}
+                    >
+                      {generatingCharacterId === character.id ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Wand2 className="h-4 w-4 mr-1" />
+                          AI生成
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const input = document.querySelector(`input[data-testid="input-upload-character-image-${character.id}"]`) as HTMLInputElement;
+                        input?.click();
+                      }}
+                      disabled={uploadingCharacterId === character.id}
+                      data-testid={`button-upload-character-image-${character.id}`}
+                    >
+                      {uploadingCharacterId === character.id ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-1" />
+                          上传
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
                 <Collapsible
@@ -541,6 +626,79 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={!!previewCharacterId} onOpenChange={(open) => !open && setPreviewCharacterId(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5" />
+              AI生成定妆照预览
+            </DialogTitle>
+            <DialogDescription>
+              选择一张图片作为角色形象参考
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            {(["full_body", "front_face", "left_profile", "right_profile"] as CharacterPoseType[]).map((poseType) => {
+              const variant = imageVariants?.find(v => v.poseType === poseType);
+              return (
+                <div key={poseType} className="space-y-2">
+                  <div className="text-sm font-medium">{characterPoseTypeLabels[poseType]}</div>
+                  <div className="relative aspect-square rounded-lg border overflow-hidden bg-muted/50">
+                    {variant?.status === "completed" && variant.imageUrl ? (
+                      <>
+                        <img
+                          src={variant.imageUrl}
+                          alt={characterPoseTypeLabels[poseType]}
+                          className="w-full h-full object-cover"
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="absolute bottom-2 right-2"
+                          onClick={() => {
+                            if (previewCharacterId && variant.id) {
+                              applyImageMutation.mutate({
+                                characterId: previewCharacterId,
+                                variantId: variant.id,
+                              });
+                            }
+                          }}
+                          disabled={applyImageMutation.isPending}
+                          data-testid={`button-apply-variant-${poseType}`}
+                        >
+                          应用此图
+                        </Button>
+                      </>
+                    ) : variant?.status === "failed" ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-destructive">
+                        <X className="h-8 w-8 mb-2" />
+                        <span className="text-sm">生成失败</span>
+                        <span className="text-xs px-4 text-center mt-1">{variant.errorMessage}</span>
+                      </div>
+                    ) : variant?.status === "generating" || variant?.status === "pending" ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+                        <RefreshCw className="h-8 w-8 mb-2 animate-spin" />
+                        <span className="text-sm">生成中...</span>
+                      </div>
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+                        <ImageIcon className="h-8 w-8 mb-2" />
+                        <span className="text-sm">待生成</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPreviewCharacterId(null)}>
+              关闭
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
