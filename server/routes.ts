@@ -1380,6 +1380,243 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
     }
   });
 
+  // Extract characters from script using AI
+  app.post("/api/projects/:projectId/characters/extract", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      
+      // Get the active script for this project
+      const scripts = await storage.getScripts(projectId);
+      const activeScript = scripts.find(s => s.isActive);
+      
+      if (!activeScript || !activeScript.content) {
+        return res.status(400).json({ error: "No active script found for this project" });
+      }
+
+      // Get existing characters to avoid duplicates
+      const existingCharacters = await storage.getCharacters(projectId);
+      const existingNames = new Set(existingCharacters.map(c => c.name.toLowerCase()));
+
+      const prompt = `你是一位专业的剧本分析师。请仔细阅读以下剧本内容，分析并提取所有角色信息。
+
+剧本内容：
+${activeScript.content}
+
+请识别剧本中的所有角色，并为每个角色提供：
+1. 角色名称
+2. 角色类型（男主/女主/反一/反二/配角/客串/群演/其他）
+3. 外貌描述（年龄、体型、发型、穿着风格等，用于生成AI图片）
+4. 角色简介
+
+返回JSON格式：
+{
+  "characters": [
+    {
+      "name": "角色名称",
+      "roleType": "male_lead|female_lead|antagonist_1|antagonist_2|supporting|cameo|extra|other",
+      "appearance": "详细的外貌描述，包括年龄、体型、发型、典型穿着等，越详细越好，用于AI绘图",
+      "description": "角色性格和背景简介"
+    }
+  ]
+}
+
+注意：
+- 只返回有台词或重要戏份的角色
+- roleType必须使用英文值
+- appearance字段要尽量详细，便于AI生成一致的角色形象`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 4096,
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const parsed = JSON.parse(content);
+      const extractedCharacters = parsed.characters || [];
+
+      const createdCharacters = [];
+      for (const char of extractedCharacters) {
+        // Skip if character already exists
+        if (existingNames.has(char.name.toLowerCase())) {
+          // Update existing character with new info
+          const existing = existingCharacters.find(c => c.name.toLowerCase() === char.name.toLowerCase());
+          if (existing) {
+            await storage.updateCharacter(existing.id, {
+              roleType: char.roleType,
+              imageReferencePrompt: char.appearance,
+              description: char.description || existing.description,
+              isAutoExtracted: true,
+            });
+            createdCharacters.push({ ...existing, updated: true });
+          }
+          continue;
+        }
+
+        const created = await storage.createCharacter({
+          projectId,
+          name: char.name,
+          roleType: char.roleType,
+          description: char.description,
+          imageReferencePrompt: char.appearance,
+          isAutoExtracted: true,
+        });
+        createdCharacters.push(created);
+      }
+
+      res.json({ 
+        message: `成功提取 ${createdCharacters.length} 个角色`,
+        characters: createdCharacters 
+      });
+    } catch (error) {
+      console.error("Error extracting characters:", error);
+      res.status(500).json({ error: "Failed to extract characters from script" });
+    }
+  });
+
+  // Get characters with their references for a project
+  app.get("/api/projects/:projectId/characters/references", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const characters = await storage.getCharacters(projectId);
+      
+      // Fetch asset references for each character
+      const charactersWithAssets = await Promise.all(
+        characters.map(async (char) => {
+          const assets = await storage.getCharacterAssetReferences(char.id);
+          return {
+            ...char,
+            assets: {
+              clothing: assets.filter(a => a.assetType === "clothing"),
+              shoe: assets.filter(a => a.assetType === "shoe"),
+              prop: assets.filter(a => a.assetType === "prop"),
+            }
+          };
+        })
+      );
+
+      res.json(charactersWithAssets);
+    } catch (error) {
+      console.error("Error fetching character references:", error);
+      res.status(500).json({ error: "Failed to fetch character references" });
+    }
+  });
+
+  // Update character (including reference image)
+  app.patch("/api/characters/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const updated = await storage.updateCharacter(id, updates);
+      if (!updated) {
+        return res.status(404).json({ error: "Character not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating character:", error);
+      res.status(500).json({ error: "Failed to update character" });
+    }
+  });
+
+  // Upload character reference image (base64)
+  app.post("/api/characters/:id/reference-image", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { imageBase64 } = req.body;
+      
+      if (!imageBase64) {
+        return res.status(400).json({ error: "imageBase64 is required" });
+      }
+
+      const updated = await storage.updateCharacter(id, {
+        imageReferenceUrl: imageBase64,
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Character not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error uploading character reference image:", error);
+      res.status(500).json({ error: "Failed to upload character reference image" });
+    }
+  });
+
+  // Get character asset references
+  app.get("/api/characters/:id/assets", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const assetType = req.query.type as string | undefined;
+      
+      const assets = await storage.getCharacterAssetReferences(id, assetType as any);
+      res.json(assets);
+    } catch (error) {
+      console.error("Error fetching character assets:", error);
+      res.status(500).json({ error: "Failed to fetch character assets" });
+    }
+  });
+
+  // Add character asset reference
+  app.post("/api/characters/:id/assets", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { assetType, imageUrl, description } = req.body;
+      
+      if (!assetType || !imageUrl) {
+        return res.status(400).json({ error: "assetType and imageUrl are required" });
+      }
+
+      const asset = await storage.createCharacterAssetReference({
+        characterId: id,
+        assetType,
+        imageUrl,
+        description,
+      });
+      res.json(asset);
+    } catch (error) {
+      console.error("Error adding character asset:", error);
+      res.status(500).json({ error: "Failed to add character asset" });
+    }
+  });
+
+  // Delete character asset reference
+  app.delete("/api/characters/:id/assets/:assetId", async (req, res) => {
+    try {
+      const { assetId } = req.params;
+      await storage.deleteCharacterAssetReference(assetId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting character asset:", error);
+      res.status(500).json({ error: "Failed to delete character asset" });
+    }
+  });
+
+  // Delete character
+  app.delete("/api/characters/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteCharacter(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting character:", error);
+      res.status(500).json({ error: "Failed to delete character" });
+    }
+  });
+
+  // Create new character manually
+  app.post("/api/characters", async (req, res) => {
+    try {
+      const data = insertCharacterSchema.parse(req.body);
+      const character = await storage.createCharacter(data);
+      res.json(character);
+    } catch (error) {
+      console.error("Error creating character:", error);
+      res.status(500).json({ error: "Failed to create character" });
+    }
+  });
+
   app.get("/api/performance-guides", async (req, res) => {
     try {
       const sceneId = req.query.sceneId as string;

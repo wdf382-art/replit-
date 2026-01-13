@@ -261,12 +261,31 @@ export const insertShotVersionSchema = createInsertSchema(shotVersions).omit({
 export type InsertShotVersion = z.infer<typeof insertShotVersionSchema>;
 export type ShotVersion = typeof shotVersions.$inferSelect;
 
+// Character role types
+export const characterRoleTypes = ["male_lead", "female_lead", "antagonist_1", "antagonist_2", "supporting", "cameo", "extra", "other"] as const;
+export type CharacterRoleType = typeof characterRoleTypes[number];
+
+export const characterRoleTypeLabels: Record<CharacterRoleType, string> = {
+  male_lead: "男主",
+  female_lead: "女主",
+  antagonist_1: "反一",
+  antagonist_2: "反二",
+  supporting: "配角",
+  cameo: "客串",
+  extra: "群演",
+  other: "其他",
+};
+
 // Characters table
 export const characters = pgTable("characters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
+  roleType: text("role_type").$type<CharacterRoleType>(),
+  imageReferenceUrl: text("image_reference_url"),
+  imageReferencePrompt: text("image_reference_prompt"),
+  isAutoExtracted: boolean("is_auto_extracted").default(false),
   emotionArc: jsonb("emotion_arc").$type<{sceneId: string; emotion: string; intensity: number}[]>(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -278,6 +297,35 @@ export const insertCharacterSchema = createInsertSchema(characters).omit({
 
 export type InsertCharacter = z.infer<typeof insertCharacterSchema>;
 export type Character = typeof characters.$inferSelect;
+
+// Character asset types (clothing, shoes, props)
+export const characterAssetTypes = ["clothing", "shoe", "prop"] as const;
+export type CharacterAssetType = typeof characterAssetTypes[number];
+
+export const characterAssetTypeLabels: Record<CharacterAssetType, string> = {
+  clothing: "衣服参考",
+  shoe: "鞋子参考",
+  prop: "道具参考",
+};
+
+// Character asset references table
+export const characterAssetReferences = pgTable("character_asset_references", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  characterId: varchar("character_id").notNull().references(() => characters.id, { onDelete: "cascade" }),
+  assetType: text("asset_type").notNull().$type<CharacterAssetType>(),
+  imageUrl: text("image_url").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertCharacterAssetReferenceSchema = createInsertSchema(characterAssetReferences).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCharacterAssetReference = z.infer<typeof insertCharacterAssetReferenceSchema>;
+export type CharacterAssetReference = typeof characterAssetReferences.$inferSelect;
 
 // Performance guides table
 export const performanceGuides = pgTable("performance_guides", {

@@ -6,6 +6,7 @@ import {
   scenes,
   shots,
   characters,
+  characterAssetReferences,
   performanceGuides,
   sceneAnalysis,
   productionNotes,
@@ -30,6 +31,8 @@ import type {
   InsertShot,
   Character,
   InsertCharacter,
+  CharacterAssetReference,
+  InsertCharacterAssetReference,
   PerformanceGuide,
   InsertPerformanceGuide,
   SceneAnalysis,
@@ -46,6 +49,7 @@ import type {
   InsertScriptAnalysisGlobal,
   PerformanceGuideV2,
   InsertPerformanceGuideV2,
+  CharacterAssetType,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -115,6 +119,10 @@ export interface IStorage {
   getPerformanceGuidesV2ByProject(projectId: string): Promise<PerformanceGuideV2[]>;
   createPerformanceGuideV2(guide: InsertPerformanceGuideV2): Promise<PerformanceGuideV2>;
   updatePerformanceGuideV2(id: string, guide: Partial<InsertPerformanceGuideV2>): Promise<PerformanceGuideV2 | undefined>;
+
+  getCharacterAssetReferences(characterId: string, assetType?: CharacterAssetType): Promise<CharacterAssetReference[]>;
+  createCharacterAssetReference(asset: InsertCharacterAssetReference): Promise<CharacterAssetReference>;
+  deleteCharacterAssetReference(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -558,6 +566,29 @@ export class DatabaseStorage implements IStorage {
       .where(eq(performanceGuidesV2.id, id))
       .returning();
     return result[0];
+  }
+
+  async getCharacterAssetReferences(characterId: string, assetType?: CharacterAssetType): Promise<CharacterAssetReference[]> {
+    if (assetType) {
+      return db.select().from(characterAssetReferences)
+        .where(and(
+          eq(characterAssetReferences.characterId, characterId),
+          eq(characterAssetReferences.assetType, assetType)
+        ))
+        .orderBy(asc(characterAssetReferences.sortOrder));
+    }
+    return db.select().from(characterAssetReferences)
+      .where(eq(characterAssetReferences.characterId, characterId))
+      .orderBy(asc(characterAssetReferences.sortOrder));
+  }
+
+  async createCharacterAssetReference(insertAsset: InsertCharacterAssetReference): Promise<CharacterAssetReference> {
+    const result = await db.insert(characterAssetReferences).values(insertAsset).returning();
+    return result[0];
+  }
+
+  async deleteCharacterAssetReference(id: string): Promise<void> {
+    await db.delete(characterAssetReferences).where(eq(characterAssetReferences.id, id));
   }
 }
 
@@ -1102,6 +1133,18 @@ export class MemStorage implements IStorage {
 
   async updatePerformanceGuideV2(_id: string, _guide: Partial<InsertPerformanceGuideV2>): Promise<PerformanceGuideV2 | undefined> {
     return undefined;
+  }
+
+  async getCharacterAssetReferences(_characterId: string, _assetType?: CharacterAssetType): Promise<CharacterAssetReference[]> {
+    return [];
+  }
+
+  async createCharacterAssetReference(_asset: InsertCharacterAssetReference): Promise<CharacterAssetReference> {
+    throw new Error("MemStorage does not support characterAssetReferences");
+  }
+
+  async deleteCharacterAssetReference(_id: string): Promise<void> {
+    // No-op for MemStorage
   }
 }
 

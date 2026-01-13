@@ -100,6 +100,32 @@ The storyboard module supports video generation from static images using multipl
 - `KLING_ACCESS_KEY`, `KLING_SECRET_KEY`: Kling API credentials
 - `JIMENG_API_KEY`: Jimeng API key
 
+### Character Reference System (Added 2026-01-13)
+The performance module includes a character image reference system for maintaining consistent character appearance across storyboard shots:
+
+**Features:**
+- **Auto-extraction from Script**: AI analyzes script content to extract character names, roles, and appearance descriptions
+- **Role Type Classification**: Characters categorized as 男主/女主/反一/反二/配角/龙套/群演
+- **Image Reference Upload**: Upload reference images for each character's appearance
+- **Asset Management**: Separate asset categories for clothing (服装), shoes (鞋履), and props (道具)
+
+**UI Structure:**
+- Performance page uses Tabs to switch between "场次表演" (scene performance) and "角色形象" (character references)
+- Card-based character display with role type badges
+- Collapsible asset sections for each character
+- "从剧本提取角色" button for AI-powered character extraction
+
+**Database Tables:**
+- `characters`: Extended with imageReferenceUrl, imageReferencePrompt, roleType, isAutoExtracted
+- `characterAssetReferences`: Stores clothing/shoe/prop images linked to characters
+
+**API Endpoints:**
+- `GET /api/projects/:projectId/characters/references` - Get characters with assets
+- `POST /api/projects/:projectId/characters/extract` - AI extract characters from script
+- `POST /api/characters/:id/reference-image` - Upload character image
+- `POST /api/characters/:id/assets` - Add asset reference
+- `DELETE /api/characters/:id/assets/:assetId` - Remove asset reference
+
 ### Design System
 The UI follows a Linear + Notion hybrid approach emphasizing information clarity and workflow efficiency. Typography uses Inter for UI and JetBrains Mono for script/code content. The app supports light/dark themes with CSS custom properties.
 

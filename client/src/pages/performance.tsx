@@ -64,6 +64,7 @@ import type {
   EmotionalChainData,
   CharacterPerformanceData,
 } from "@shared/schema";
+import { CharacterReferences } from "@/components/character-references";
 
 export default function PerformancePage() {
   const { toast } = useToast();
@@ -74,6 +75,7 @@ export default function PerformancePage() {
   const [isGeneratingScene, setIsGeneratingScene] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [expandedCharacter, setExpandedCharacter] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"performance" | "characters">("performance");
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -268,78 +270,93 @@ export default function PerformancePage() {
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between gap-4 p-4 border-b">
-          <div className="flex items-center gap-3">
-            <Drama className="h-5 w-5 text-muted-foreground" />
-            <div>
-              <h1 className="text-lg font-semibold" data-testid="text-performance-title">表演指导</h1>
-              {selectedScene && (
-                <p className="text-sm text-muted-foreground">
-                  第{selectedScene.sceneIdentifier || selectedScene.sceneNumber}场 - {selectedScene.title || selectedScene.location || "未命名"}
-                </p>
-              )}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "performance" | "characters")} className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between gap-4 p-4 border-b">
+            <div className="flex items-center gap-3">
+              <Drama className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <h1 className="text-lg font-semibold" data-testid="text-performance-title">表演指导</h1>
+                {activeTab === "performance" && selectedScene && (
+                  <p className="text-sm text-muted-foreground">
+                    第{selectedScene.sceneIdentifier || selectedScene.sceneNumber}场 - {selectedScene.title || selectedScene.location || "未命名"}
+                  </p>
+                )}
+              </div>
             </div>
+
+            <TabsList>
+              <TabsTrigger value="performance" data-testid="tab-performance">
+                <Drama className="mr-2 h-4 w-4" />
+                场次表演
+              </TabsTrigger>
+              <TabsTrigger value="characters" data-testid="tab-characters">
+                <User className="mr-2 h-4 w-4" />
+                角色形象
+              </TabsTrigger>
+            </TabsList>
+
+            {activeTab === "performance" && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleGenerateGlobal}
+                  disabled={isGeneratingGlobal || !currentProject}
+                  data-testid="button-generate-global"
+                >
+                  {isGeneratingGlobal ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      分析中...
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="mr-2 h-4 w-4" />
+                      全剧分析
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  onClick={handleGenerateScene}
+                  disabled={isGeneratingScene || !selectedScene}
+                  data-testid="button-generate-performance"
+                >
+                  {isGeneratingScene ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="mr-2 h-4 w-4" />
+                      生成本场指导
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleGenerateGlobal}
-              disabled={isGeneratingGlobal || !currentProject}
-              data-testid="button-generate-global"
-            >
-              {isGeneratingGlobal ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  分析中...
-                </>
-              ) : (
-                <>
-                  <Brain className="mr-2 h-4 w-4" />
-                  全剧分析
-                </>
-              )}
-            </Button>
+          <TabsContent value="performance" className="flex-1 overflow-hidden m-0">
+            {(isGeneratingGlobal || isGeneratingScene) && (
+              <div className="p-4 border-b bg-muted/30">
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="text-muted-foreground flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+                    {isGeneratingGlobal ? "AI正在通读全剧分析人物弧光..." : "AI正在生成场次表演指导..."}
+                  </span>
+                  <span>{generationProgress}%</span>
+                </div>
+                <Progress value={generationProgress} />
+              </div>
+            )}
 
-            <Button
-              onClick={handleGenerateScene}
-              disabled={isGeneratingScene || !selectedScene}
-              data-testid="button-generate-performance"
-            >
-              {isGeneratingScene ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  生成中...
-                </>
-              ) : (
-                <>
-                  <Wand2 className="mr-2 h-4 w-4" />
-                  生成本场指导
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        {(isGeneratingGlobal || isGeneratingScene) && (
-          <div className="p-4 border-b bg-muted/30">
-            <div className="flex items-center justify-between text-sm mb-2">
-              <span className="text-muted-foreground flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary animate-pulse" />
-                {isGeneratingGlobal ? "AI正在通读全剧分析人物弧光..." : "AI正在生成场次表演指导..."}
-              </span>
-              <span>{generationProgress}%</span>
-            </div>
-            <Progress value={generationProgress} />
-          </div>
-        )}
-
-        <ScrollArea className="flex-1">
-          <div className="p-4 space-y-6">
-            {globalAnalysis && (
-              <Collapsible defaultOpen={false}>
-                <Card>
-                  <CollapsibleTrigger asChild>
+            <ScrollArea className="flex-1 h-full">
+              <div className="p-4 space-y-6">
+                {globalAnalysis && (
+                  <Collapsible defaultOpen={false}>
+                    <Card>
+                      <CollapsibleTrigger asChild>
                     <CardHeader className="cursor-pointer hover-elevate">
                       <div className="flex items-center justify-between">
                         <CardTitle className="flex items-center gap-2">
@@ -816,8 +833,14 @@ export default function PerformancePage() {
                 </CardContent>
               </Card>
             )}
-          </div>
-        </ScrollArea>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="characters" className="flex-1 overflow-auto m-0">
+            <CharacterReferences projectId={currentProject?.id} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
