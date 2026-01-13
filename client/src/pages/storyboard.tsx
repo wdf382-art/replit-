@@ -19,6 +19,8 @@ import {
   FileText,
   ClipboardList,
   Trash2,
+  Video,
+  Play,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,7 +52,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
-import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio, ShotVersion, CallSheet } from "@shared/schema";
+import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio, ShotVersion, CallSheet, VideoModel } from "@shared/schema";
 import {
   directorStyles,
   directorStyleInfo,
@@ -63,6 +65,8 @@ import {
   cameraMovements,
   cameraMovementInfo,
   aspectRatios,
+  videoModels,
+  videoModelInfo,
 } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
@@ -111,7 +115,10 @@ export default function StoryboardPage() {
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [isGeneratingAllImages, setIsGeneratingAllImages] = useState(false);
   const [imageGenProgress, setImageGenProgress] = useState(0);
-  const [storyboardViewType, setStoryboardViewType] = useState<"image" | "text">("image");
+  const [storyboardViewType, setStoryboardViewType] = useState<"image" | "text" | "video">("image");
+  const [selectedVideoModel, setSelectedVideoModel] = useState<VideoModel>("veo");
+  const [generatingVideoId, setGeneratingVideoId] = useState<string | null>(null);
+  const [isGeneratingAllVideos, setIsGeneratingAllVideos] = useState(false);
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -136,6 +143,20 @@ export default function StoryboardPage() {
     },
     enabled: !!selectedScene?.id,
   });
+
+  // Check if any shots are currently generating videos - poll main query for updates
+  const hasGeneratingVideos = shots?.some(s => s.videoStatus === "generating");
+  
+  // Effect to poll for video status updates
+  useEffect(() => {
+    if (!hasGeneratingVideos || !selectedScene?.id) return;
+    
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shots", selectedScene?.id, selectedDirectorStyle] });
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [hasGeneratingVideos, selectedScene?.id, selectedDirectorStyle]);
 
   const { data: callSheets } = useQuery<CallSheet[]>({
     queryKey: ["/api/call-sheets", currentProject?.id],
@@ -257,6 +278,56 @@ export default function StoryboardPage() {
       setIsGeneratingAllImages(false);
       toast({
         title: "批量生成失败",
+        description: "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Generate video for a single shot (async - returns immediately)
+  const generateShotVideoMutation = useMutation({
+    mutationFn: async ({ shotId, model }: { shotId: string; model: VideoModel }) => {
+      setGeneratingVideoId(shotId);
+      return apiRequest("POST", `/api/shots/${shotId}/generate-video`, { model });
+    },
+    onSuccess: () => {
+      // Async job started - refresh to show "generating" status
+      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+      setGeneratingVideoId(null);
+      toast({
+        title: "视频生成已开始",
+        description: "后台正在生成视频，完成后会自动更新",
+      });
+    },
+    onError: (error: any) => {
+      setGeneratingVideoId(null);
+      toast({
+        title: "视频生成失败",
+        description: error.message || "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Generate videos for all shots in the scene (async - returns immediately)
+  const generateAllVideosMutation = useMutation({
+    mutationFn: async ({ sceneId, model }: { sceneId: string; model: VideoModel }) => {
+      setIsGeneratingAllVideos(true);
+      return apiRequest("POST", `/api/scenes/${sceneId}/generate-all-videos`, { model });
+    },
+    onSuccess: (data: any) => {
+      // Async jobs started - refresh to show "generating" status
+      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+      setIsGeneratingAllVideos(false);
+      toast({
+        title: "批量视频生成已开始",
+        description: `已提交 ${data.total} 个视频生成任务，后台正在处理`,
+      });
+    },
+    onError: () => {
+      setIsGeneratingAllVideos(false);
+      toast({
+        title: "批量视频生成失败",
         description: "请稍后重试",
         variant: "destructive",
       });
@@ -931,6 +1002,16 @@ export default function StoryboardPage() {
                         <FileText className="mr-1 h-3 w-3" />
                         文字分镜
                       </Button>
+                      <Button
+                        variant={storyboardViewType === "video" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="rounded-none border-0 h-8"
+                        onClick={() => setStoryboardViewType("video")}
+                        data-testid="button-view-video"
+                      >
+                        <Video className="mr-1 h-3 w-3" />
+                        视频分镜
+                      </Button>
                     </div>
                   </div>
                   {storyboardViewType === "image" && (
@@ -953,6 +1034,41 @@ export default function StoryboardPage() {
                         </>
                       )}
                     </Button>
+                  )}
+                  {storyboardViewType === "video" && (
+                    <div className="flex items-center gap-2">
+                      <Select value={selectedVideoModel} onValueChange={(v) => setSelectedVideoModel(v as VideoModel)}>
+                        <SelectTrigger className="w-32 h-8" data-testid="select-video-model">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {videoModels.map((model) => (
+                            <SelectItem key={model} value={model}>
+                              {videoModelInfo[model].nameCN}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => selectedScene && generateAllVideosMutation.mutate({ sceneId: selectedScene.id, model: selectedVideoModel })}
+                        disabled={isGeneratingAllVideos || !selectedScene}
+                        data-testid="button-generate-all-videos"
+                      >
+                        {isGeneratingAllVideos ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            批量生成中...
+                          </>
+                        ) : (
+                          <>
+                            <Video className="mr-2 h-4 w-4" />
+                            一键生成所有视频
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
                 </div>
 
@@ -1031,6 +1147,91 @@ export default function StoryboardPage() {
                             </Button>
                           )}
                         </div>
+                      </div>
+                    )}
+                    {storyboardViewType === "video" && (
+                      <div className="aspect-video bg-muted relative">
+                        {shot.videoUrl ? (
+                          <video
+                            src={shot.videoUrl}
+                            className="w-full h-full object-cover"
+                            controls
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : shot.imageBase64 ? (
+                          <div className="w-full h-full relative">
+                            <img
+                              src={`data:image/png;base64,${shot.imageBase64}`}
+                              alt={`Shot ${shot.shotNumber}`}
+                              className="w-full h-full object-cover opacity-50"
+                            />
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                              {shot.videoStatus === "generating" ? (
+                                <>
+                                  <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                                  <span className="text-sm text-muted-foreground">视频生成中...</span>
+                                </>
+                              ) : shot.videoStatus === "failed" ? (
+                                <>
+                                  <span className="text-sm text-destructive">生成失败</span>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      generateShotVideoMutation.mutate({ shotId: shot.id, model: selectedVideoModel });
+                                    }}
+                                    disabled={generatingVideoId === shot.id}
+                                    data-testid={`button-retry-video-${shot.id}`}
+                                  >
+                                    <RefreshCw className="mr-2 h-3 w-3" />
+                                    重试
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    generateShotVideoMutation.mutate({ shotId: shot.id, model: selectedVideoModel });
+                                  }}
+                                  disabled={generatingVideoId === shot.id}
+                                  data-testid={`button-generate-video-${shot.id}`}
+                                >
+                                  {generatingVideoId === shot.id ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                      生成中...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="mr-2 h-3 w-3" />
+                                      生成视频
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                            <Camera className="h-12 w-12 text-muted-foreground/30" />
+                            <span className="text-sm text-muted-foreground">请先生成图片</span>
+                          </div>
+                        )}
+                        <div className="absolute top-2 left-2">
+                          <Badge variant="secondary" className="text-xs">
+                            #{shot.shotNumber}
+                          </Badge>
+                        </div>
+                        {shot.videoModel && shot.videoUrl && (
+                          <div className="absolute top-2 right-2">
+                            <Badge variant="outline" className="text-xs bg-background/80">
+                              {videoModelInfo[shot.videoModel]?.nameCN || shot.videoModel}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                     )}
                     <CardContent className={storyboardViewType === "text" ? "p-4" : "p-4"}>

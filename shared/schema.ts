@@ -162,6 +162,20 @@ export type CallSheet = typeof callSheets.$inferSelect;
 export const aspectRatios = ["16:9", "2.35:1", "4:3", "1:1", "9:16", "1.85:1", "custom"] as const;
 export type AspectRatio = typeof aspectRatios[number];
 
+// Video generation models
+export const videoModels = ["veo", "kling", "jimeng"] as const;
+export type VideoModel = typeof videoModels[number];
+
+export const videoModelInfo: Record<VideoModel, { name: string; nameCN: string; description: string }> = {
+  veo: { name: "Google VEO", nameCN: "VEO", description: "Google's latest video generation model" },
+  kling: { name: "Kling O1", nameCN: "可灵O1", description: "Kuaishou's video generation model" },
+  jimeng: { name: "Jimeng 4.0", nameCN: "即梦4.0", description: "ByteDance's video generation model" },
+};
+
+// Video generation status
+export const videoStatuses = ["pending", "generating", "completed", "failed"] as const;
+export type VideoStatus = typeof videoStatuses[number];
+
 // Shots/Storyboards table
 export const shots = pgTable("shots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -180,6 +194,10 @@ export const shots = pgTable("shots", {
   customAspectRatio: text("custom_aspect_ratio"),
   imageUrl: text("image_url"),
   imageBase64: text("image_base64"),
+  videoUrl: text("video_url"),
+  videoModel: text("video_model").$type<VideoModel>(),
+  videoStatus: text("video_status").$type<VideoStatus>(),
+  videoError: text("video_error"),
   atmosphere: text("atmosphere"),
   notes: text("notes"),
   version: integer("version").notNull().default(1),

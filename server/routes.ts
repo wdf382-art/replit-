@@ -261,6 +261,12 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Initialize video job queue with storage update function
+  const { initializeVideoJobQueue } = await import("./video-job-queue");
+  initializeVideoJobQueue(async (shotId, updates) => {
+    return storage.updateShot(shotId, updates);
+  });
+  
   registerImageRoutes(app);
   
   app.get("/api/projects", async (req, res) => {
@@ -1256,6 +1262,108 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
       console.error("Error generating scene images:", error);
       res.status(500).json({ error: "Failed to generate scene images" });
     }
+  });
+
+  // Generate video for a single shot from its image (async - returns immediately)
+  app.post("/api/shots/:id/generate-video", async (req, res) => {
+    try {
+      const { model = "veo" } = req.body as { model?: "veo" | "kling" | "jimeng" };
+      
+      const shot = await storage.getShot(req.params.id);
+      if (!shot) {
+        return res.status(404).json({ error: "Shot not found" });
+      }
+
+      if (!shot.imageBase64) {
+        return res.status(400).json({ error: "Shot must have an image before generating video" });
+      }
+
+      // Update status to generating
+      await storage.updateShot(shot.id, {
+        videoStatus: "generating",
+        videoModel: model,
+      });
+
+      const scene = await storage.getScene(shot.sceneId);
+      const videoDescription = `${shot.description}. Camera: ${shot.cameraMovement || "static"}. ${shot.atmosphere || ""}. Scene: ${scene?.title || ""}`;
+
+      // Enqueue job for async processing
+      const { enqueueVideoJob } = await import("./video-job-queue");
+      const jobId = enqueueVideoJob(shot.id, model, shot.imageBase64, videoDescription, shot.duration || 5);
+
+      // Return immediately with job info
+      res.json({ 
+        jobId, 
+        shotId: shot.id, 
+        status: "generating",
+        message: "Video generation started. Poll GET /api/shots/:id to check status." 
+      });
+    } catch (error) {
+      console.error("Error starting video generation:", error);
+      res.status(500).json({ error: "Failed to start video generation" });
+    }
+  });
+
+  // Generate videos for all shots in a scene (async - returns immediately)
+  app.post("/api/scenes/:id/generate-all-videos", async (req, res) => {
+    try {
+      const { model = "veo" } = req.body as { model?: "veo" | "kling" | "jimeng" };
+      
+      const scene = await storage.getScene(req.params.id);
+      if (!scene) {
+        return res.status(404).json({ error: "Scene not found" });
+      }
+
+      const shots = await storage.getShots(req.params.id);
+      const shotsWithImages = shots.filter(s => s.imageBase64);
+      
+      if (shotsWithImages.length === 0) {
+        return res.status(400).json({ error: "No shots with images to generate videos for" });
+      }
+
+      const { enqueueVideoJob } = await import("./video-job-queue");
+      const jobs: { jobId: string; shotId: string; shotNumber: number }[] = [];
+
+      // Batch update all shots to generating status in parallel
+      await Promise.all(shotsWithImages.map(shot => 
+        storage.updateShot(shot.id, {
+          videoStatus: "generating",
+          videoModel: model,
+        })
+      ));
+
+      // Enqueue all jobs (non-blocking)
+      for (const shot of shotsWithImages) {
+        const videoDescription = `${shot.description}. Camera: ${shot.cameraMovement || "static"}. ${shot.atmosphere || ""}. Scene: ${scene.title || ""}`;
+        const jobId = enqueueVideoJob(shot.id, model, shot.imageBase64!, videoDescription, shot.duration || 5);
+        jobs.push({ jobId, shotId: shot.id, shotNumber: shot.shotNumber });
+      }
+
+      // Return immediately with job info
+      res.json({ 
+        jobs,
+        total: jobs.length,
+        message: "Video generation started for all shots. Poll GET /api/shots to check status." 
+      });
+    } catch (error) {
+      console.error("Error starting scene video generation:", error);
+      res.status(500).json({ error: "Failed to start video generation" });
+    }
+  });
+
+  // Check video API key availability
+  app.get("/api/video-models/availability", async (req, res) => {
+    res.json({
+      veo: !!process.env.VEO_API_KEY,
+      kling: !!(process.env.KLING_ACCESS_KEY && process.env.KLING_SECRET_KEY),
+      jimeng: !!process.env.JIMENG_API_KEY,
+    });
+  });
+
+  // Get video job queue status
+  app.get("/api/video-jobs/status", async (req, res) => {
+    const { getQueueStatus } = await import("./video-job-queue");
+    res.json(getQueueStatus());
   });
 
   app.get("/api/characters", async (req, res) => {
