@@ -21,10 +21,10 @@ export async function generateCharacterImage(prompt: string): Promise<Buffer> {
   }
   
   try {
-    console.log("[GeminiImageClient] Generating image with model: gemini-2.5-flash-image");
+    console.log("[GeminiImageClient] Generating image with model: gemini-2.0-flash-exp");
     
     const response = await geminiClient.models.generateContent({
-      model: "gemini-2.5-flash-image",
+      model: "gemini-2.0-flash-exp",
       contents: [
         {
           role: "user",
