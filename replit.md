@@ -39,10 +39,13 @@ Preferred communication style: Simple, everyday language.
 - Implements version history for scripts (`ScriptVersions`) and shots (`ShotVersions`), tracking modifications with timestamps and change descriptions.
 - Provides restore functionality and uses monotonic version numbering.
 
-#### Video Storyboard System
-- Supports video generation from static images using VEO, 可灵O1 (Kling), and 既梦4.0 (Jimeng) AI models.
-- Features an asynchronous job queue (max 2 concurrent jobs), non-blocking API, status polling, and retry mechanisms.
-- Database fields in `shots` table track `videoUrl`, `videoModel`, `videoStatus`, and `videoError`.
+#### Storyboard System
+- **View Modes**: Three view modes - 文字分镜 (Text Storyboard), 图片分镜 (Image Storyboard), 视频分镜 (Video Storyboard)
+- **Image Provider Selection**: Users can select between OpenAI DALL-E 3 and Gemini Nano Banana for storyboard image generation via dropdown selector
+- **Provider Configuration**: `imageProviderInfo` in `shared/schema.ts` defines available providers with name, Chinese name, and availability status
+- **Video Generation**: Supports video generation from static images using VEO, 可灵O1 (Kling), and 既梦4.0 (Jimeng) AI models
+- Features an asynchronous job queue (max 2 concurrent jobs), non-blocking API, status polling, and retry mechanisms
+- Database fields in `shots` table track `videoUrl`, `videoModel`, `videoStatus`, and `videoError`
 
 #### Character Reference System
 - **Auto-extraction**: AI analyzes scripts to extract character names, roles, and appearance descriptions, classifying roles (e.g., 男主/女主).

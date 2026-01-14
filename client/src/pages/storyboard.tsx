@@ -52,7 +52,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
-import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio, ShotVersion, CallSheet, VideoModel } from "@shared/schema";
+import type { Project, Scene, Shot, DirectorStyle, VisualStyle, ShotType, CameraAngle, CameraMovement, AspectRatio, ShotVersion, CallSheet, VideoModel, ImageProvider } from "@shared/schema";
 import {
   directorStyles,
   directorStyleInfo,
@@ -67,6 +67,8 @@ import {
   aspectRatios,
   videoModels,
   videoModelInfo,
+  imageProviders,
+  imageProviderInfo,
 } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
@@ -119,6 +121,7 @@ export default function StoryboardPage() {
   const [selectedVideoModel, setSelectedVideoModel] = useState<VideoModel>("veo");
   const [generatingVideoId, setGeneratingVideoId] = useState<string | null>(null);
   const [isGeneratingAllVideos, setIsGeneratingAllVideos] = useState(false);
+  const [selectedImageProvider, setSelectedImageProvider] = useState<ImageProvider>("openai");
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -236,9 +239,9 @@ export default function StoryboardPage() {
 
   // Generate image for a single shot
   const generateShotImageMutation = useMutation({
-    mutationFn: async (shotId: string) => {
+    mutationFn: async ({ shotId, provider }: { shotId: string; provider: ImageProvider }) => {
       setGeneratingImageId(shotId);
-      return apiRequest("POST", `/api/shots/${shotId}/generate-image`);
+      return apiRequest("POST", `/api/shots/${shotId}/generate-image`, { provider });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
@@ -260,10 +263,10 @@ export default function StoryboardPage() {
 
   // Generate images for all shots in the scene
   const generateAllImagesMutation = useMutation({
-    mutationFn: async (sceneId: string) => {
+    mutationFn: async ({ sceneId, provider }: { sceneId: string; provider: ImageProvider }) => {
       setIsGeneratingAllImages(true);
       setImageGenProgress(0);
-      return apiRequest("POST", `/api/scenes/${sceneId}/generate-all-images`);
+      return apiRequest("POST", `/api/scenes/${sceneId}/generate-all-images`, { provider });
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
@@ -983,16 +986,6 @@ export default function StoryboardPage() {
                     </div>
                     <div className="flex items-center border rounded-md overflow-hidden">
                       <Button
-                        variant={storyboardViewType === "image" ? "secondary" : "ghost"}
-                        size="sm"
-                        className="rounded-none border-0 h-8"
-                        onClick={() => setStoryboardViewType("image")}
-                        data-testid="button-view-image"
-                      >
-                        <Image className="mr-1 h-3 w-3" />
-                        图片分镜
-                      </Button>
-                      <Button
                         variant={storyboardViewType === "text" ? "secondary" : "ghost"}
                         size="sm"
                         className="rounded-none border-0 h-8"
@@ -1001,6 +994,16 @@ export default function StoryboardPage() {
                       >
                         <FileText className="mr-1 h-3 w-3" />
                         文字分镜
+                      </Button>
+                      <Button
+                        variant={storyboardViewType === "image" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="rounded-none border-0 h-8"
+                        onClick={() => setStoryboardViewType("image")}
+                        data-testid="button-view-image"
+                      >
+                        <Image className="mr-1 h-3 w-3" />
+                        图片分镜
                       </Button>
                       <Button
                         variant={storyboardViewType === "video" ? "secondary" : "ghost"}
@@ -1015,25 +1018,39 @@ export default function StoryboardPage() {
                     </div>
                   </div>
                   {storyboardViewType === "image" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => selectedScene && generateAllImagesMutation.mutate(selectedScene.id)}
-                      disabled={isGeneratingAllImages || !selectedScene}
-                      data-testid="button-generate-all-images"
-                    >
-                      {isGeneratingAllImages ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          批量生成中...
-                        </>
-                      ) : (
-                        <>
-                          <ImagePlus className="mr-2 h-4 w-4" />
-                          一键生成所有图片
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Select value={selectedImageProvider} onValueChange={(v) => setSelectedImageProvider(v as ImageProvider)}>
+                        <SelectTrigger className="w-32 h-8" data-testid="select-image-provider">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {imageProviders.filter(p => imageProviderInfo[p].available).map((provider) => (
+                            <SelectItem key={provider} value={provider}>
+                              {imageProviderInfo[provider].nameCN}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => selectedScene && generateAllImagesMutation.mutate({ sceneId: selectedScene.id, provider: selectedImageProvider })}
+                        disabled={isGeneratingAllImages || !selectedScene}
+                        data-testid="button-generate-all-images"
+                      >
+                        {isGeneratingAllImages ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            批量生成中...
+                          </>
+                        ) : (
+                          <>
+                            <ImagePlus className="mr-2 h-4 w-4" />
+                            一键生成所有图片
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
                   {storyboardViewType === "video" && (
                     <div className="flex items-center gap-2">
@@ -1100,7 +1117,7 @@ export default function StoryboardPage() {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                generateShotImageMutation.mutate(shot.id);
+                                generateShotImageMutation.mutate({ shotId: shot.id, provider: selectedImageProvider });
                               }}
                               disabled={generatingImageId === shot.id}
                               data-testid={`button-generate-image-${shot.id}`}
@@ -1135,7 +1152,7 @@ export default function StoryboardPage() {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                generateShotImageMutation.mutate(shot.id);
+                                generateShotImageMutation.mutate({ shotId: shot.id, provider: selectedImageProvider });
                               }}
                               disabled={generatingImageId === shot.id}
                             >

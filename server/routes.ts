@@ -1157,6 +1157,7 @@ ${directorRulesSection}
       }
 
       const scene = await storage.getScene(shot.sceneId);
+      const provider = (req.body?.provider as ImageProvider) || "openai";
       
       const imagePrompt = `Film storyboard frame, cinematic style:
 Scene: ${scene?.title || ""}
@@ -1171,15 +1172,16 @@ ${shot.atmosphere ? `Atmosphere: ${shot.atmosphere}` : ""}
 
 Requirements: Professional film cinematography, cinematic lighting, high quality, movie style, 16:9 aspect ratio`;
 
-      const { generateImageBuffer } = await import("./replit_integrations/image/client");
+      const { generateImage } = await import("./image-providers");
       
       let imageBuffer: Buffer | null = null;
       let lastError: Error | null = null;
       
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-          console.log(`Generating image for shot ${shot.id}, attempt ${attempt}/${MAX_RETRIES}`);
-          imageBuffer = await generateImageBuffer(imagePrompt, "1024x1024");
+          console.log(`Generating image for shot ${shot.id} using ${provider}, attempt ${attempt}/${MAX_RETRIES}`);
+          const result = await generateImage(imagePrompt, provider);
+          imageBuffer = result.buffer;
           break;
         } catch (err) {
           lastError = err as Error;
@@ -1225,7 +1227,8 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
         return res.status(400).json({ error: "No shots to generate images for" });
       }
 
-      const { generateImageBuffer } = await import("./replit_integrations/image/client");
+      const provider = (req.body?.provider as ImageProvider) || "openai";
+      const { generateImage } = await import("./image-providers");
       const results = [];
       
       for (const shot of shots) {
@@ -1246,8 +1249,9 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
         
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
           try {
-            console.log(`Generating image for shot ${shot.id} (${shot.shotNumber}), attempt ${attempt}/${MAX_RETRIES}`);
-            imageBuffer = await generateImageBuffer(imagePrompt, "1024x1024");
+            console.log(`Generating image for shot ${shot.id} (${shot.shotNumber}) using ${provider}, attempt ${attempt}/${MAX_RETRIES}`);
+            const result = await generateImage(imagePrompt, provider);
+            imageBuffer = result.buffer;
             break;
           } catch (err) {
             console.error(`Image generation attempt ${attempt} for shot ${shot.id} failed:`, err);

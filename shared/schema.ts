@@ -346,6 +346,15 @@ export type CharacterImageVariantStatus = typeof characterImageVariantStatuses[n
 export const imageProviders = ["openai", "gemini", "jimeng", "kling", "hailuo", "tongyi"] as const;
 export type ImageProvider = typeof imageProviders[number];
 
+export const imageProviderInfo: Record<ImageProvider, { name: string; nameCN: string; available: boolean }> = {
+  openai: { name: "OpenAI DALL-E 3", nameCN: "OpenAI", available: true },
+  gemini: { name: "Gemini Nano Banana", nameCN: "Nano Banana", available: true },
+  jimeng: { name: "Jimeng", nameCN: "即梦", available: false },
+  kling: { name: "Kling", nameCN: "可灵", available: false },
+  hailuo: { name: "Hailuo", nameCN: "海螺", available: false },
+  tongyi: { name: "Tongyi Wanxiang", nameCN: "通义万象", available: false },
+};
+
 export const characterImageVariants = pgTable("character_image_variants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   characterId: varchar("character_id").notNull().references(() => characters.id, { onDelete: "cascade" }),
