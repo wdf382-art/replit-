@@ -62,6 +62,8 @@ async function generateWithVeo(
     const apiUrl = `${apiConfig.baseUrl}/v1beta/models/veo-2.0-generate-001:predictLongRunning`;
     console.log("[VEO] Sending request to:", apiUrl);
     
+    const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+    
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
@@ -71,13 +73,19 @@ async function generateWithVeo(
       body: JSON.stringify({
         instances: [{
           prompt: description,
-          image: {
-            bytesBase64Encoded: imageBase64,
+          referenceImages: {
+            content: [{
+              image: {
+                bytesBase64Encoded: cleanBase64,
+                mimeType: "image/png",
+              }
+            }]
           },
         }],
         parameters: {
           aspectRatio: "16:9",
-          durationSeconds: duration,
+          durationSeconds: Math.min(duration, 8),
+          sampleCount: 1,
           personGeneration: "allow_adult",
         },
       }),
@@ -86,10 +94,11 @@ async function generateWithVeo(
     if (!response.ok) {
       const errorText = await response.text();
       console.error("[VEO] API error:", errorText);
-      return { success: false, error: `VEO API error: ${response.status}` };
+      return { success: false, error: `VEO API error: ${response.status} - ${errorText}` };
     }
 
     const result = await response.json();
+    console.log("[VEO] Initial response:", JSON.stringify(result));
     
     if (result.name) {
       const videoUrl = await pollForVeoResult(result.name, apiConfig);
