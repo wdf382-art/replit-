@@ -56,10 +56,16 @@ Preferred communication style: Simple, everyday language.
 - **Image References**: Allows uploading reference images for characters and managing assets (clothing, shoes, props).
 - **AI Character Image Auto-Generation**: Generates 4 reference images per character (全身照, 正脸近景, 左侧脸近景, 右侧脸近景) using NANO BANANA PRO (Gemini gemini-3-pro-image-preview model). Features:
   - **Version History**: Each regeneration creates a new version, preserving all previous versions for comparison
+  - **Version Delete**: Delete unwanted versions (only available when multiple versions exist)
   - **Preview Modal**: Large main image with prev/next navigation, thumbnail gallery, fullscreen view
   - **Version Selector**: Dropdown to switch between different generation versions (newest shown first)
   - **Background Processing**: Async job queue (max 2 concurrent) with status polling every 3 seconds
   - **Apply Workflow**: Select any variant image to apply as the character's main reference image
+
+#### Call Sheet Management
+- **Date-based Grouping**: Call sheets are grouped by shoot date (今天/明天/昨天/upcoming/past/undated)
+- **Date Picker**: Users can set shoot date during call sheet creation
+- **Scene Filtering**: Performance guidance page filters scenes by selected call sheet
 
 #### Director Style Framework
 - Storyboard generation uses an 8-dimension director style framework, analyzing how directors handle universal cinematography rules (e.g., Shot size transitions, 30-degree rule, camera movement, composition, color, lighting) and their signature techniques.
