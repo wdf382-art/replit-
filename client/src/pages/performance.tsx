@@ -63,6 +63,7 @@ import type {
   SceneDiagnosisData,
   EmotionalChainData,
   CharacterPerformanceData,
+  CallSheet,
 } from "@shared/schema";
 import { CharacterReferences } from "@/components/character-references";
 
@@ -71,6 +72,7 @@ export default function PerformancePage() {
   const { currentProject, setCurrentProject } = useAppStore();
 
   const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
+  const [selectedCallSheetId, setSelectedCallSheetId] = useState<string | null>(null);
   const [isGeneratingGlobal, setIsGeneratingGlobal] = useState(false);
   const [isGeneratingScene, setIsGeneratingScene] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
@@ -89,6 +91,17 @@ export default function PerformancePage() {
   const { data: characters } = useQuery<Character[]>({
     queryKey: ["/api/characters", currentProject?.id],
     enabled: !!currentProject?.id,
+  });
+
+  const { data: callSheets } = useQuery<CallSheet[]>({
+    queryKey: ["/api/call-sheets", currentProject?.id],
+    enabled: !!currentProject?.id,
+  });
+
+  const filteredScenes = scenes?.filter((scene) => {
+    if (!selectedCallSheetId) return true;
+    const callSheet = callSheets?.find((cs) => cs.id === selectedCallSheetId);
+    return callSheet?.sceneNumbers?.includes(scene.sceneNumber);
   });
 
   const { data: globalAnalysis, isLoading: globalLoading } = useQuery<ScriptAnalysisGlobal | null>({
@@ -114,11 +127,11 @@ export default function PerformancePage() {
   });
 
   useEffect(() => {
-    if (scenes && scenes.length > 0 && !selectedScene) {
-      const sortedScenes = [...scenes].sort((a, b) => a.sceneNumber - b.sceneNumber);
-      setSelectedScene(sortedScenes[0]);
+    if (filteredScenes && filteredScenes.length > 0 && !selectedScene) {
+      const sorted = [...filteredScenes].sort((a, b) => a.sceneNumber - b.sceneNumber);
+      setSelectedScene(sorted[0]);
     }
-  }, [scenes, selectedScene]);
+  }, [filteredScenes, selectedScene]);
 
   const generateGlobalMutation = useMutation({
     mutationFn: async (projectId: string) => {
@@ -198,7 +211,7 @@ export default function PerformancePage() {
     generateSceneMutation.mutate(selectedScene.id);
   };
 
-  const sortedScenes = scenes ? [...scenes].sort((a, b) => a.sceneNumber - b.sceneNumber) : [];
+  const sortedScenes = filteredScenes ? [...filteredScenes].sort((a, b) => a.sceneNumber - b.sceneNumber) : [];
 
   const hook = sceneGuide?.sceneHook as SceneHookData | null;
   const diagnosis = sceneGuide?.sceneDiagnosis as SceneDiagnosisData | null;
@@ -228,6 +241,30 @@ export default function PerformancePage() {
               {projects?.map((project) => (
                 <SelectItem key={project.id} value={project.id}>
                   {project.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select 
+            value={selectedCallSheetId || "all"} 
+            onValueChange={(value) => {
+              if (value === "all") {
+                setSelectedCallSheetId(null);
+              } else {
+                setSelectedCallSheetId(value);
+              }
+              setSelectedScene(null);
+            }}
+          >
+            <SelectTrigger data-testid="select-callsheet-performance">
+              <SelectValue placeholder="选择通告单" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">所有场次 (全剧本)</SelectItem>
+              {callSheets?.map((cs) => (
+                <SelectItem key={cs.id} value={cs.id}>
+                  {cs.title}
                 </SelectItem>
               ))}
             </SelectContent>
