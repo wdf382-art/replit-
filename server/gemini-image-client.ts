@@ -21,6 +21,8 @@ export async function generateCharacterImage(prompt: string): Promise<Buffer> {
   }
   
   try {
+    console.log("[GeminiImageClient] Generating image with model: gemini-2.5-flash-image");
+    
     const response = await geminiClient.models.generateContent({
       model: "gemini-2.5-flash-image",
       contents: [
@@ -30,7 +32,7 @@ export async function generateCharacterImage(prompt: string): Promise<Buffer> {
         },
       ],
       config: {
-        responseModalities: [Modality.TEXT, Modality.IMAGE],
+        responseModalities: [Modality.IMAGE],
       },
     });
     
@@ -54,6 +56,7 @@ export async function generateCharacterImage(prompt: string): Promise<Buffer> {
     
     for (const part of parts) {
       if (part.inlineData?.data && part.inlineData?.mimeType?.startsWith("image/")) {
+        console.log("[GeminiImageClient] Image generated successfully");
         return Buffer.from(part.inlineData.data, "base64");
       }
     }
