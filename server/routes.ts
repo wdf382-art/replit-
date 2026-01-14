@@ -526,7 +526,8 @@ export async function registerRoutes(
       });
 
       // 自动提取所有场次 - 使用正则表达式从剧本中识别场次标记
-      const autoExtractedSceneNumbers: number[] = [];
+      // 存储场次标识符（字符串，如"1-1"）和对应的主序号（数字）
+      const extractedSceneData: { identifier: string; mainNumber: number; sortKey: number }[] = [];
       
       // 辅助函数：将中文数字转换为阿拉伯数字
       const chineseToNumber = (str: string): number => {
@@ -551,63 +552,93 @@ export async function registerRoutes(
         return result + temp;
       };
 
-      // Pattern 1: 第X场 with Arabic numbers
-      const arabicPattern = /(?:^|[\n\r])\s*第\s*(\d+)\s*[场集次]/gi;
+      // 辅助函数：生成排序键（支持 X-Y 格式）
+      const getSortKey = (identifier: string): number => {
+        const dashMatch = identifier.match(/^(\d+)[-.](\d+)$/);
+        if (dashMatch) {
+          return parseInt(dashMatch[1]) * 1000 + parseInt(dashMatch[2]);
+        }
+        const num = parseInt(identifier);
+        return isNaN(num) ? 0 : num * 1000;
+      };
+
+      // 辅助函数：添加场次（避免重复）
+      const addScene = (identifier: string, mainNumber: number) => {
+        if (!extractedSceneData.find(s => s.identifier === identifier)) {
+          extractedSceneData.push({ 
+            identifier, 
+            mainNumber, 
+            sortKey: getSortKey(identifier) 
+          });
+        }
+      };
+
       let match;
-      while ((match = arabicPattern.exec(content)) !== null) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && !autoExtractedSceneNumbers.includes(num)) {
-          autoExtractedSceneNumbers.push(num);
+      
+      // Pattern 1: X-Y 或 X.Y 格式（如 "1-1", "4-8"）- 完整保留标识符
+      const dashPattern = /(?:^|[\n\r])\s*(\d+)[-.](\d+)(?:\s|[：:.]|$)/gi;
+      while ((match = dashPattern.exec(content)) !== null) {
+        const main = parseInt(match[1], 10);
+        const sub = parseInt(match[2], 10);
+        if (!isNaN(main) && !isNaN(sub)) {
+          addScene(`${main}-${sub}`, main);
         }
       }
 
-      // Pattern 2: 第X场 with Chinese numbers (一二三...)
+      // Pattern 2: 第X场 with Arabic numbers
+      const arabicPattern = /(?:^|[\n\r])\s*第\s*(\d+)\s*[场集次]/gi;
+      while ((match = arabicPattern.exec(content)) !== null) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num)) {
+          addScene(String(num), num);
+        }
+      }
+
+      // Pattern 3: 第X场 with Chinese numbers (一二三...)
       const chinesePattern = /(?:^|[\n\r])\s*第\s*([一二三四五六七八九十百千零]+)\s*[场集次]/gi;
       while ((match = chinesePattern.exec(content)) !== null) {
         const num = chineseToNumber(match[1]);
-        if (num > 0 && !autoExtractedSceneNumbers.includes(num)) {
-          autoExtractedSceneNumbers.push(num);
-        }
-      }
-
-      // Pattern 3: X-Y or X.Y format (e.g., 1-1, 4-8)
-      const dashPattern = /(?:^|[\n\r])\s*(\d+)[-.](\d+)\s/gi;
-      while ((match = dashPattern.exec(content)) !== null) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && !autoExtractedSceneNumbers.includes(num)) {
-          autoExtractedSceneNumbers.push(num);
+        if (num > 0) {
+          addScene(String(num), num);
         }
       }
 
       // Pattern 4: 场次X format
-      const sceneNumPattern = /(?:^|[\n\r])\s*场次\s*(\d+)/gi;
+      const sceneNumPattern = /(?:^|[\n\r])\s*场次\s*[:：]?\s*(\d+)/gi;
       while ((match = sceneNumPattern.exec(content)) !== null) {
         const num = parseInt(match[1], 10);
-        if (!isNaN(num) && !autoExtractedSceneNumbers.includes(num)) {
-          autoExtractedSceneNumbers.push(num);
+        if (!isNaN(num)) {
+          addScene(String(num), num);
         }
       }
 
-      // Sort and create scenes automatically
-      autoExtractedSceneNumbers.sort((a, b) => a - b);
-      console.log(`[Script Upload] Auto-extracted ${autoExtractedSceneNumbers.length} scenes: ${autoExtractedSceneNumbers.join(', ')}`);
+      // 按排序键排序
+      extractedSceneData.sort((a, b) => a.sortKey - b.sortKey);
+      const autoExtractedSceneNumbers = extractedSceneData.map(s => s.mainNumber);
+      console.log(`[Script Upload] Auto-extracted ${extractedSceneData.length} scenes: ${extractedSceneData.map(s => s.identifier).join(', ')}`);
 
       // 获取项目中已存在的场次，避免重复创建
       const existingScenes = await storage.getScenes(actualProjectId);
-      const existingSceneNumbers = new Set(existingScenes.map(s => s.sceneNumber));
 
       const createdScenes = [];
       const updatedScenes = [];
-      for (const sceneNum of autoExtractedSceneNumbers) {
-        const extracted = extractSceneContentFromScript(content, sceneNum);
+      
+      for (let i = 0; i < extractedSceneData.length; i++) {
+        const sceneData = extractedSceneData[i];
+        const extracted = extractSceneContentFromScript(content, sceneData.mainNumber);
         
-        // 检查场次是否已存在
-        const existingScene = existingScenes.find(s => s.sceneNumber === sceneNum);
+        // 优先按sceneIdentifier匹配，其次按sceneNumber匹配
+        const existingScene = existingScenes.find(s => 
+          s.sceneIdentifier === sceneData.identifier || 
+          (s.sceneNumber === sceneData.mainNumber && !s.sceneIdentifier)
+        );
         
         if (existingScene) {
           // 更新已存在的场次内容
           await storage.updateScene(existingScene.id, {
             scriptId: script.id,
+            sceneIdentifier: sceneData.identifier,
+            sortOrder: i,
             title: extracted.title || existingScene.title,
             location: extracted.location || existingScene.location,
             timeOfDay: extracted.timeOfDay || existingScene.timeOfDay,
@@ -621,8 +652,10 @@ export async function registerRoutes(
           const scene = await storage.createScene({
             projectId: actualProjectId,
             scriptId: script.id,
-            sceneNumber: sceneNum,
-            title: extracted.title || `第 ${sceneNum} 场`,
+            sceneNumber: sceneData.mainNumber,
+            sceneIdentifier: sceneData.identifier,
+            sortOrder: i,
+            title: extracted.title || `场次 ${sceneData.identifier}`,
             location: extracted.location,
             timeOfDay: extracted.timeOfDay,
             description: extracted.description,
@@ -640,7 +673,8 @@ export async function registerRoutes(
         projectId: actualProjectId, 
         fileName: req.file.originalname,
         extractedScenes: createdScenes.length,
-        sceneNumbers: autoExtractedSceneNumbers
+        sceneNumbers: autoExtractedSceneNumbers,
+        sceneIdentifiers: extractedSceneData.map(s => s.identifier)
       });
     } catch (error) {
       console.error("Error uploading script:", error);
@@ -2428,17 +2462,40 @@ ${scriptContent.substring(0, 8000)}
         return result + temp;
       };
 
-      // 增强场次识别 - 支持多种格式
+      // 增强场次识别 - 支持多种格式，同时提取数字和完整标识符
       const sceneNumbersFound: number[] = [];
+      const sceneIdentifiersFound: string[] = [];
       
-      // 格式1: "第X场", "第X集", "X场" 等 (X可以是阿拉伯数字或中文数字)
+      // 辅助函数：添加标识符（避免重复）
+      const addIdentifier = (identifier: string, mainNumber: number) => {
+        if (!sceneIdentifiersFound.includes(identifier)) {
+          sceneIdentifiersFound.push(identifier);
+        }
+        if (!sceneNumbersFound.includes(mainNumber)) {
+          sceneNumbersFound.push(mainNumber);
+        }
+      };
+      
+      // 格式1: X-Y 或 X.Y 格式（如 "1-1", "4-8"）- 优先匹配，保留完整标识符
+      const dashPattern = /(\d+)[-.](\d+)/g;
+      for (const match of rawText.matchAll(dashPattern)) {
+        const main = parseInt(match[1]);
+        const sub = parseInt(match[2]);
+        if (!isNaN(main) && !isNaN(sub) && main > 0) {
+          addIdentifier(`${main}-${sub}`, main);
+        }
+      }
+      
+      // 格式2: "第X场", "第X集", "X场" 等 (X可以是阿拉伯数字或中文数字)
       const chineseScenePattern = /(?:第?\s*([一二三四五六七八九十百\d]+)\s*[场集次])/gi;
       for (const match of rawText.matchAll(chineseScenePattern)) {
         const num = chineseToNumber(match[1]);
-        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+        if (!isNaN(num) && num > 0) {
+          addIdentifier(String(num), num);
+        }
       }
       
-      // 格式2: "场次: 1, 2, 3" 或 "场次：1、2、3" - 逗号/顿号分隔的数字列表（支持阿拉伯和中文数字）
+      // 格式3: "场次: 1, 2, 3" 或 "场次：1、2、3" - 逗号/顿号分隔的数字列表
       const listPattern = /场次[:：\s]?\s*([^。\n]+)/gi;
       for (const match of rawText.matchAll(listPattern)) {
         const numberList = match[1];
@@ -2446,24 +2503,26 @@ ${scriptContent.substring(0, 8000)}
         for (const token of tokens) {
           const trimmed = token.trim();
           if (!trimmed) continue;
-          // 尝试解析阿拉伯数字或中文数字
-          const num = chineseToNumber(trimmed);
-          if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+          // 检查是否是 X-Y 格式
+          const dashMatch = trimmed.match(/^(\d+)[-.](\d+)$/);
+          if (dashMatch) {
+            addIdentifier(`${dashMatch[1]}-${dashMatch[2]}`, parseInt(dashMatch[1]));
+          } else {
+            const num = chineseToNumber(trimmed);
+            if (!isNaN(num) && num > 0) {
+              addIdentifier(String(num), num);
+            }
+          }
         }
-      }
-      
-      // 格式3: X-Y 或 X.Y 格式 (如 "1-1", "4-8")
-      const dashPattern = /(\d+)[-.](\d+)/g;
-      for (const match of rawText.matchAll(dashPattern)) {
-        const num = parseInt(match[1]);
-        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
       }
       
       // 格式4: 独立的 "场次 X" 格式
       const standalonePattern = /场次\s*[:：]?\s*(\d+)/gi;
       for (const match of rawText.matchAll(standalonePattern)) {
         const num = parseInt(match[1]);
-        if (!isNaN(num) && num > 0) sceneNumbersFound.push(num);
+        if (!isNaN(num) && num > 0) {
+          addIdentifier(String(num), num);
+        }
       }
       
       // 格式5: 中文数字列表格式 如 "一、二、三" 或 "第一、第二、第三"
@@ -2471,18 +2530,19 @@ ${scriptContent.substring(0, 8000)}
       for (const match of rawText.matchAll(chineseListPattern)) {
         const num1 = chineseToNumber(match[1]);
         const num2 = chineseToNumber(match[2]);
-        if (!isNaN(num1) && num1 > 0) sceneNumbersFound.push(num1);
-        if (!isNaN(num2) && num2 > 0) sceneNumbersFound.push(num2);
+        if (!isNaN(num1) && num1 > 0) addIdentifier(String(num1), num1);
+        if (!isNaN(num2) && num2 > 0) addIdentifier(String(num2), num2);
       }
       
       const uniqueSceneNumbers = [...new Set(sceneNumbersFound)].sort((a, b) => a - b);
-      console.log(`[Call Sheet Upload] Extracted scene numbers: ${uniqueSceneNumbers.join(', ')} from file: ${req.file.originalname}`);
+      console.log(`[Call Sheet Upload] Extracted scene identifiers: ${sceneIdentifiersFound.join(', ')} from file: ${req.file.originalname}`);
 
       const callSheet = await storage.createCallSheet({
         projectId,
         title,
         rawText,
         sceneNumbers: uniqueSceneNumbers,
+        sceneIdentifiers: sceneIdentifiersFound,
         fileMetadata: {
           fileName: req.file.originalname,
           fileType: ext.slice(1),

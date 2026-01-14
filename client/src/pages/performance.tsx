@@ -106,6 +106,10 @@ export default function PerformancePage() {
     if (!selectedCallSheetId) return true;
     const callSheet = callSheets?.find((cs) => cs.id === selectedCallSheetId);
     if (!callSheet) return true;
+    // 优先使用 sceneIdentifiers 匹配，其次使用 sceneNumbers
+    if (callSheet.sceneIdentifiers && callSheet.sceneIdentifiers.length > 0 && scene.sceneIdentifier) {
+      return callSheet.sceneIdentifiers.includes(scene.sceneIdentifier);
+    }
     return callSheet.sceneNumbers?.includes(scene.sceneNumber) ?? false;
   });
 

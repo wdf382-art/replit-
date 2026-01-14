@@ -146,6 +146,7 @@ export const callSheets = pgTable("call_sheets", {
   title: text("title").notNull(),
   rawText: text("raw_text"),
   sceneNumbers: jsonb("scene_numbers").$type<number[]>(),
+  sceneIdentifiers: jsonb("scene_identifiers").$type<string[]>(), // Full scene identifiers like ["1-1", "1-2", "2-1"]
   fileMetadata: jsonb("file_metadata").$type<{fileName?: string; fileType?: string; uploadedAt?: string}>(),
   shootDate: timestamp("shoot_date"), // The date this call sheet is for (shooting date)
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
