@@ -1,5 +1,5 @@
-import type { CharacterPoseType, CharacterImageVariantStatus } from "@shared/schema";
-import { generateCharacterImage } from "./gemini-image-client";
+import type { CharacterPoseType, CharacterImageVariantStatus, ImageProvider } from "@shared/schema";
+import { generateImage } from "./image-providers";
 
 interface CharacterImageJob {
   id: string;
@@ -9,6 +9,7 @@ interface CharacterImageJob {
   poseType: CharacterPoseType;
   prompt: string;
   batchId: string;
+  provider: ImageProvider;
   status: "pending" | "processing" | "completed" | "failed";
   createdAt: Date;
 }
@@ -32,7 +33,8 @@ export function enqueueCharacterImageJob(
   characterName: string,
   poseType: CharacterPoseType,
   prompt: string,
-  batchId: string
+  batchId: string,
+  provider: ImageProvider = "openai"
 ): string {
   const jobId = `char_img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -44,12 +46,13 @@ export function enqueueCharacterImageJob(
     poseType,
     prompt,
     batchId,
+    provider,
     status: "pending",
     createdAt: new Date(),
   };
 
   jobQueue.push(job);
-  console.log(`[CharacterImageJobQueue] Enqueued job ${jobId} for variant ${variantId}`);
+  console.log(`[CharacterImageJobQueue] Enqueued job ${jobId} for variant ${variantId} using ${provider}`);
 
   setImmediate(() => processQueue());
 
@@ -94,17 +97,17 @@ async function updateVariantWithRetry(variantId: string, updates: Record<string,
 }
 
 async function processJob(job: CharacterImageJob) {
-  console.log(`[CharacterImageJobQueue] Processing job ${job.id} for variant ${job.variantId}`);
+  console.log(`[CharacterImageJobQueue] Processing job ${job.id} for variant ${job.variantId} using ${job.provider}`);
 
   await updateVariantWithRetry(job.variantId, {
     status: "generating" as CharacterImageVariantStatus,
   });
 
   try {
-    const imageBuffer = await generateCharacterImage(job.prompt);
-    const base64Image = `data:image/png;base64,${imageBuffer.toString("base64")}`;
+    const result = await generateImage(job.prompt, job.provider);
+    const base64Image = `data:image/png;base64,${result.buffer.toString("base64")}`;
 
-    console.log(`[CharacterImageJobQueue] Job ${job.id} completed successfully`);
+    console.log(`[CharacterImageJobQueue] Job ${job.id} completed successfully with ${result.provider}`);
     const updated = await updateVariantWithRetry(job.variantId, {
       imageUrl: base64Image,
       status: "completed" as CharacterImageVariantStatus,

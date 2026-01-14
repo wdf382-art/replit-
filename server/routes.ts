@@ -59,6 +59,7 @@ import {
   characterPoseTypes,
   characterPoseTypeLabels,
   type CharacterPoseType,
+  type ImageProvider,
 } from "@shared/schema";
 
 const ScriptGenerationSchema = z.object({
@@ -1646,6 +1647,15 @@ ${activeScript.content}
   app.post("/api/characters/:id/generate-images", async (req, res) => {
     try {
       const { id } = req.params;
+      const requestedProvider = (req.body?.provider || "openai") as ImageProvider;
+      
+      // Validate that the provider is available
+      const availableProviders: ImageProvider[] = ["openai", "gemini"];
+      if (!availableProviders.includes(requestedProvider)) {
+        return res.status(400).json({ error: `Provider "${requestedProvider}" is not yet available. Please use: ${availableProviders.join(", ")}` });
+      }
+      const provider = requestedProvider;
+      
       const character = await storage.getCharacter(id);
       
       if (!character) {
@@ -1764,6 +1774,7 @@ ${scriptContent.substring(0, 8000)}
           status: "pending",
           generationBatchId: batchId,
           version: newVersion,
+          provider,
         });
 
         variants.push(variant);
@@ -1775,7 +1786,8 @@ ${scriptContent.substring(0, 8000)}
           character.name,
           poseType,
           posePrompt,
-          batchId
+          batchId,
+          provider
         );
       }
 

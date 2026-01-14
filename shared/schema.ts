@@ -343,6 +343,9 @@ export const characterImageVariantStatuses = ["pending", "generating", "complete
 export type CharacterImageVariantStatus = typeof characterImageVariantStatuses[number];
 
 // Character image variants table (for AI-generated reference images)
+export const imageProviders = ["openai", "gemini", "jimeng", "kling", "hailuo", "tongyi"] as const;
+export type ImageProvider = typeof imageProviders[number];
+
 export const characterImageVariants = pgTable("character_image_variants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   characterId: varchar("character_id").notNull().references(() => characters.id, { onDelete: "cascade" }),
@@ -363,6 +366,7 @@ export const characterImageVariants = pgTable("character_image_variants", {
   isApplied: boolean("is_applied").default(false),
   generationBatchId: varchar("generation_batch_id"),
   version: integer("version").notNull().default(1),
+  provider: text("provider").$type<ImageProvider>().default("openai"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

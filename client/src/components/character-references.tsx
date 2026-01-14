@@ -51,12 +51,25 @@ import {
   characterRoleTypeLabels,
   characterAssetTypeLabels,
   characterPoseTypeLabels,
+  imageProviders,
   type CharacterRoleType,
   type CharacterAssetType,
   type CharacterAssetReference,
   type CharacterImageVariant,
   type CharacterPoseType,
+  type ImageProvider,
 } from "@shared/schema";
+
+const imageProviderLabels: Record<ImageProvider, string> = {
+  openai: "OpenAI DALL-E",
+  gemini: "NANO BANANA PRO",
+  jimeng: "记梦 4.0",
+  kling: "可灵",
+  hailuo: "海螺",
+  tongyi: "通义万象",
+};
+
+const availableProviders: ImageProvider[] = ["openai", "gemini"];
 
 interface CharacterWithAssets {
   id: string;
@@ -93,6 +106,7 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<{ url: string; label: string } | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [selectedProvider, setSelectedProvider] = useState<ImageProvider>("openai");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const assetInputRef = useRef<HTMLInputElement>(null);
 
@@ -260,11 +274,11 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
   });
 
   const generateImagesMutation = useMutation({
-    mutationFn: async (characterId: string) => {
-      const result = await apiRequest("POST", `/api/characters/${characterId}/generate-images`, {});
+    mutationFn: async ({ characterId, provider }: { characterId: string; provider: ImageProvider }) => {
+      const result = await apiRequest("POST", `/api/characters/${characterId}/generate-images`, { provider });
       return result as { version?: number; batchId?: string };
     },
-    onSuccess: (data, characterId) => {
+    onSuccess: (data, { characterId }) => {
       setGeneratingCharacterId(null);
       setPreviewCharacterId(characterId);
       setSelectedVersion(data.version || null);
@@ -272,7 +286,7 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
       refetchVariants();
       toast({
         title: "开始生成",
-        description: `正在为角色生成第${data.version || 1}版定妆照，请稍候...`,
+        description: `正在使用 ${imageProviderLabels[selectedProvider]} 为角色生成第${data.version || 1}版定妆照，请稍候...`,
       });
     },
     onError: (error: Error) => {
@@ -308,7 +322,7 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
 
   const handleGenerateImages = (characterId: string) => {
     setGeneratingCharacterId(characterId);
-    generateImagesMutation.mutate(characterId);
+    generateImagesMutation.mutate({ characterId, provider: selectedProvider });
   };
 
   const handleOpenPreview = (characterId: string) => {
@@ -320,7 +334,7 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
   const handleRegenerateImages = () => {
     if (previewCharacterId) {
       setGeneratingCharacterId(previewCharacterId);
-      generateImagesMutation.mutate(previewCharacterId);
+      generateImagesMutation.mutate({ characterId: previewCharacterId, provider: selectedProvider });
     }
   };
 
@@ -865,19 +879,36 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
           </div>
 
           <div className="flex justify-between gap-2">
-            <Button 
-              variant="default" 
-              onClick={handleRegenerateImages}
-              disabled={generatingCharacterId === previewCharacterId}
-              data-testid="button-regenerate"
-            >
-              {generatingCharacterId === previewCharacterId ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Wand2 className="h-4 w-4 mr-2" />
-              )}
-              生成新版本
-            </Button>
+            <div className="flex items-center gap-2">
+              <Select
+                value={selectedProvider}
+                onValueChange={(v) => setSelectedProvider(v as ImageProvider)}
+              >
+                <SelectTrigger className="w-44" data-testid="select-provider">
+                  <SelectValue placeholder="选择模型" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableProviders.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {imageProviderLabels[p]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button 
+                variant="default" 
+                onClick={handleRegenerateImages}
+                disabled={generatingCharacterId === previewCharacterId}
+                data-testid="button-regenerate"
+              >
+                {generatingCharacterId === previewCharacterId ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Wand2 className="h-4 w-4 mr-2" />
+                )}
+                生成新版本
+              </Button>
+            </div>
             <Button variant="outline" onClick={() => setPreviewCharacterId(null)}>
               关闭
             </Button>
