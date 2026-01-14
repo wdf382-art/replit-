@@ -32,7 +32,9 @@ import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -174,9 +176,11 @@ export default function StoryboardPage() {
   });
 
   const groupedCallSheets = useMemo(() => {
-    if (!callSheets) return { today: [], upcoming: [], past: [], noDate: [] };
+    if (!callSheets) return { today: [], tomorrow: [], yesterday: [], upcoming: [], past: [], noDate: [] };
     
     const today: typeof callSheets = [];
+    const tomorrow: typeof callSheets = [];
+    const yesterday: typeof callSheets = [];
     const upcoming: typeof callSheets = [];
     const past: typeof callSheets = [];
     const noDate: typeof callSheets = [];
@@ -190,6 +194,10 @@ export default function StoryboardPage() {
         const shootDate = new Date(cs.shootDate);
         if (isToday(shootDate)) {
           today.push(cs);
+        } else if (isTomorrow(shootDate)) {
+          tomorrow.push(cs);
+        } else if (isYesterday(shootDate)) {
+          yesterday.push(cs);
         } else if (shootDate > now) {
           upcoming.push(cs);
         } else {
@@ -201,7 +209,7 @@ export default function StoryboardPage() {
     upcoming.sort((a, b) => new Date(a.shootDate!).getTime() - new Date(b.shootDate!).getTime());
     past.sort((a, b) => new Date(b.shootDate!).getTime() - new Date(a.shootDate!).getTime());
     
-    return { today, upcoming, past, noDate };
+    return { today, tomorrow, yesterday, upcoming, past, noDate };
   }, [callSheets]);
 
   const getDateLabel = (date: Date) => {
@@ -213,12 +221,9 @@ export default function StoryboardPage() {
 
   const filteredScenes = scenes?.filter((scene) => {
     if (!selectedCallSheetId) return true;
-    if (selectedCallSheetId === "today") {
-      const todaySheets = callSheets?.filter((cs) => cs.shootDate && isToday(new Date(cs.shootDate)));
-      return todaySheets?.some((cs) => cs.sceneNumbers?.includes(scene.sceneNumber));
-    }
     const callSheet = callSheets?.find((cs) => cs.id === selectedCallSheetId);
-    return callSheet?.sceneNumbers?.includes(scene.sceneNumber);
+    if (!callSheet) return true;
+    return callSheet.sceneNumbers?.includes(scene.sceneNumber) ?? false;
   });
 
   useEffect(() => {
@@ -739,29 +744,72 @@ export default function StoryboardPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">所有场次 (全剧本)</SelectItem>
+                  
                   {groupedCallSheets.today.length > 0 && (
-                    <SelectItem value="today">当日通告 ({groupedCallSheets.today.length})</SelectItem>
+                    <SelectGroup>
+                      <SelectLabel>今天</SelectLabel>
+                      {groupedCallSheets.today.map((cs) => (
+                        <SelectItem key={cs.id} value={cs.id}>
+                          {cs.title} ({cs.sceneNumbers?.length || 0}场)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   )}
-                  {groupedCallSheets.today.length > 0 && groupedCallSheets.today.map((cs) => (
-                    <SelectItem key={cs.id} value={cs.id}>
-                      {cs.title} (今天)
-                    </SelectItem>
-                  ))}
-                  {groupedCallSheets.upcoming.length > 0 && groupedCallSheets.upcoming.map((cs) => (
-                    <SelectItem key={cs.id} value={cs.id}>
-                      {cs.title} ({getDateLabel(new Date(cs.shootDate!))})
-                    </SelectItem>
-                  ))}
-                  {groupedCallSheets.past.length > 0 && groupedCallSheets.past.map((cs) => (
-                    <SelectItem key={cs.id} value={cs.id}>
-                      {cs.title} ({getDateLabel(new Date(cs.shootDate!))})
-                    </SelectItem>
-                  ))}
-                  {groupedCallSheets.noDate.length > 0 && groupedCallSheets.noDate.map((cs) => (
-                    <SelectItem key={cs.id} value={cs.id}>
-                      {cs.title} (未设日期)
-                    </SelectItem>
-                  ))}
+                  
+                  {groupedCallSheets.tomorrow.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>明天</SelectLabel>
+                      {groupedCallSheets.tomorrow.map((cs) => (
+                        <SelectItem key={cs.id} value={cs.id}>
+                          {cs.title} ({cs.sceneNumbers?.length || 0}场)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  
+                  {groupedCallSheets.yesterday.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>昨天</SelectLabel>
+                      {groupedCallSheets.yesterday.map((cs) => (
+                        <SelectItem key={cs.id} value={cs.id}>
+                          {cs.title} ({cs.sceneNumbers?.length || 0}场)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  
+                  {groupedCallSheets.upcoming.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>即将到来</SelectLabel>
+                      {groupedCallSheets.upcoming.map((cs) => (
+                        <SelectItem key={cs.id} value={cs.id}>
+                          {getDateLabel(new Date(cs.shootDate!))} · {cs.title} ({cs.sceneNumbers?.length || 0}场)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  
+                  {groupedCallSheets.past.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>已过期</SelectLabel>
+                      {groupedCallSheets.past.map((cs) => (
+                        <SelectItem key={cs.id} value={cs.id}>
+                          {getDateLabel(new Date(cs.shootDate!))} · {cs.title} ({cs.sceneNumbers?.length || 0}场)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  
+                  {groupedCallSheets.noDate.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>未设日期</SelectLabel>
+                      {groupedCallSheets.noDate.map((cs) => (
+                        <SelectItem key={cs.id} value={cs.id}>
+                          {cs.title} ({cs.sceneNumbers?.length || 0}场)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                 </SelectContent>
               </Select>
               {extractAllScenesMutation.isPending && (
