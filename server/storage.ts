@@ -17,7 +17,7 @@ import {
   scriptAnalysisGlobal,
   performanceGuidesV2,
 } from "@shared/schema";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import type {
   User,
@@ -130,6 +130,9 @@ export interface IStorage {
   // Character image variants
   getCharacterImageVariants(characterId: string): Promise<CharacterImageVariant[]>;
   getCharacterImageVariantsByBatch(batchId: string): Promise<CharacterImageVariant[]>;
+  getCharacterImageVariantsByVersion(characterId: string, version: number): Promise<CharacterImageVariant[]>;
+  getLatestVersionNumber(characterId: string): Promise<number>;
+  getVersionNumbers(characterId: string): Promise<number[]>;
   createCharacterImageVariant(variant: InsertCharacterImageVariant): Promise<CharacterImageVariant>;
   updateCharacterImageVariant(id: string, updates: Partial<InsertCharacterImageVariant>): Promise<CharacterImageVariant | undefined>;
   deleteCharacterImageVariantsByCharacter(characterId: string): Promise<void>;
@@ -611,6 +614,30 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(characterImageVariants)
       .where(eq(characterImageVariants.generationBatchId, batchId))
       .orderBy(asc(characterImageVariants.createdAt));
+  }
+
+  async getCharacterImageVariantsByVersion(characterId: string, version: number): Promise<CharacterImageVariant[]> {
+    return db.select().from(characterImageVariants)
+      .where(and(
+        eq(characterImageVariants.characterId, characterId),
+        eq(characterImageVariants.version, version)
+      ))
+      .orderBy(asc(characterImageVariants.createdAt));
+  }
+
+  async getLatestVersionNumber(characterId: string): Promise<number> {
+    const result = await db.select({ maxVersion: sql<number>`COALESCE(MAX(${characterImageVariants.version}), 0)` })
+      .from(characterImageVariants)
+      .where(eq(characterImageVariants.characterId, characterId));
+    return result[0]?.maxVersion ?? 0;
+  }
+
+  async getVersionNumbers(characterId: string): Promise<number[]> {
+    const result = await db.selectDistinct({ version: characterImageVariants.version })
+      .from(characterImageVariants)
+      .where(eq(characterImageVariants.characterId, characterId))
+      .orderBy(desc(characterImageVariants.version));
+    return result.map(r => r.version);
   }
 
   async createCharacterImageVariant(insertVariant: InsertCharacterImageVariant): Promise<CharacterImageVariant> {
@@ -1191,6 +1218,18 @@ export class MemStorage implements IStorage {
   }
 
   async getCharacterImageVariantsByBatch(_batchId: string): Promise<CharacterImageVariant[]> {
+    return [];
+  }
+
+  async getCharacterImageVariantsByVersion(_characterId: string, _version: number): Promise<CharacterImageVariant[]> {
+    return [];
+  }
+
+  async getLatestVersionNumber(_characterId: string): Promise<number> {
+    return 0;
+  }
+
+  async getVersionNumbers(_characterId: string): Promise<number[]> {
     return [];
   }
 

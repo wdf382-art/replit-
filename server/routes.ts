@@ -1724,10 +1724,11 @@ ${scriptContent.substring(0, 8000)}
       // Generate batch ID for this generation session
       const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Clear any existing non-applied variants for this character
-      await storage.deleteCharacterImageVariantsByCharacter(id);
+      // Get the next version number (increment from current max)
+      const currentMaxVersion = await storage.getLatestVersionNumber(id);
+      const newVersion = currentMaxVersion + 1;
 
-      // Create variants for all 4 poses and enqueue generation jobs
+      // Create variants for all 4 poses with new version number and enqueue generation jobs
       const variants = [];
       for (const poseType of characterPoseTypes) {
         const poseLabel = characterPoseTypeLabels[poseType];
@@ -1762,6 +1763,7 @@ ${scriptContent.substring(0, 8000)}
           appearanceDescriptor,
           status: "pending",
           generationBatchId: batchId,
+          version: newVersion,
         });
 
         variants.push(variant);
@@ -1780,6 +1782,7 @@ ${scriptContent.substring(0, 8000)}
       res.json({
         success: true,
         batchId,
+        version: newVersion,
         variants,
         message: "Image generation started for all 4 poses",
       });
@@ -1828,6 +1831,34 @@ ${scriptContent.substring(0, 8000)}
     } catch (error) {
       console.error("Error getting character image job status:", error);
       res.status(500).json({ error: "Failed to get job status" });
+    }
+  });
+
+  // Get all version numbers for a character's image variants
+  app.get("/api/characters/:id/image-versions", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const versions = await storage.getVersionNumbers(id);
+      res.json(versions);
+    } catch (error) {
+      console.error("Error getting character image versions:", error);
+      res.status(500).json({ error: "Failed to get image versions" });
+    }
+  });
+
+  // Get character image variants by version
+  app.get("/api/characters/:id/image-variants/version/:version", async (req, res) => {
+    try {
+      const { id, version } = req.params;
+      const versionNum = parseInt(version, 10);
+      if (isNaN(versionNum)) {
+        return res.status(400).json({ error: "Invalid version number" });
+      }
+      const variants = await storage.getCharacterImageVariantsByVersion(id, versionNum);
+      res.json(variants);
+    } catch (error) {
+      console.error("Error getting character image variants by version:", error);
+      res.status(500).json({ error: "Failed to get variants by version" });
     }
   });
 

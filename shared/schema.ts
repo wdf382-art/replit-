@@ -362,6 +362,7 @@ export const characterImageVariants = pgTable("character_image_variants", {
   errorMessage: text("error_message"),
   isApplied: boolean("is_applied").default(false),
   generationBatchId: varchar("generation_batch_id"),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   User,
@@ -12,8 +12,12 @@ import {
   ImageIcon,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Wand2,
   X,
+  Eye,
+  History,
+  Maximize2,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,6 +90,9 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
   const [newCharacterRole, setNewCharacterRole] = useState<CharacterRoleType>("supporting");
   const [generatingCharacterId, setGeneratingCharacterId] = useState<string | null>(null);
   const [previewCharacterId, setPreviewCharacterId] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<{ url: string; label: string } | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const assetInputRef = useRef<HTMLInputElement>(null);
 
@@ -211,31 +218,61 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
     },
   });
 
-  const { data: imageVariants, refetch: refetchVariants } = useQuery<CharacterImageVariant[]>({
-    queryKey: ["/api/characters", previewCharacterId, "image-variants"],
+  const { data: versionNumbers } = useQuery<number[]>({
+    queryKey: ["/api/characters", previewCharacterId, "image-versions"],
     queryFn: async () => {
       if (!previewCharacterId) return [];
+      const res = await fetch(`/api/characters/${previewCharacterId}/image-versions`);
+      return res.json();
+    },
+    enabled: !!previewCharacterId,
+  });
+
+  const sortedVersionNumbers = versionNumbers ? [...versionNumbers].sort((a, b) => b - a) : [];
+  const latestVersion = sortedVersionNumbers[0] ?? null;
+
+  useEffect(() => {
+    if (sortedVersionNumbers.length > 0 && selectedVersion === null) {
+      setSelectedVersion(latestVersion);
+    }
+  }, [sortedVersionNumbers.length, selectedVersion, latestVersion]);
+
+  const effectiveVersion = selectedVersion || latestVersion;
+
+  const { data: imageVariants, refetch: refetchVariants } = useQuery<CharacterImageVariant[]>({
+    queryKey: ["/api/characters", previewCharacterId, "image-variants", effectiveVersion],
+    queryFn: async () => {
+      if (!previewCharacterId) return [];
+      if (effectiveVersion) {
+        const res = await fetch(`/api/characters/${previewCharacterId}/image-variants/version/${effectiveVersion}`);
+        return res.json();
+      }
       const res = await fetch(`/api/characters/${previewCharacterId}/image-variants`);
       return res.json();
     },
     enabled: !!previewCharacterId,
-    refetchInterval: (data) => {
-      const hasGenerating = data?.state?.data?.some(v => v.status === "pending" || v.status === "generating");
+    refetchInterval: (query) => {
+      const variants = query.state?.data;
+      if (!Array.isArray(variants)) return false;
+      const hasGenerating = variants.some(v => v.status === "pending" || v.status === "generating");
       return hasGenerating ? 3000 : false;
     },
   });
 
   const generateImagesMutation = useMutation({
     mutationFn: async (characterId: string) => {
-      return apiRequest("POST", `/api/characters/${characterId}/generate-images`, {});
+      const result = await apiRequest("POST", `/api/characters/${characterId}/generate-images`, {});
+      return result as { version?: number; batchId?: string };
     },
-    onSuccess: (_, characterId) => {
+    onSuccess: (data, characterId) => {
       setGeneratingCharacterId(null);
       setPreviewCharacterId(characterId);
+      setSelectedVersion(data.version || null);
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", characterId, "image-versions"] });
       refetchVariants();
       toast({
         title: "开始生成",
-        description: "正在为角色生成4张定妆照，请稍候...",
+        description: `正在为角色生成第${data.version || 1}版定妆照，请稍候...`,
       });
     },
     onError: (error: Error) => {
@@ -273,6 +310,30 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
     setGeneratingCharacterId(characterId);
     generateImagesMutation.mutate(characterId);
   };
+
+  const handleOpenPreview = (characterId: string) => {
+    setPreviewCharacterId(characterId);
+    setSelectedVersion(null);
+    setCurrentImageIndex(0);
+  };
+
+  const handleRegenerateImages = () => {
+    if (previewCharacterId) {
+      setGeneratingCharacterId(previewCharacterId);
+      generateImagesMutation.mutate(previewCharacterId);
+    }
+  };
+
+  const handlePreviousImage = () => {
+    setCurrentImageIndex(prev => prev > 0 ? prev - 1 : 3);
+  };
+
+  const handleNextImage = () => {
+    setCurrentImageIndex(prev => prev < 3 ? prev + 1 : 0);
+  };
+
+  const poseTypes: CharacterPoseType[] = ["full_body", "front_face", "left_profile", "right_profile"];
+  const currentVariant = imageVariants?.find(v => v.poseType === poseTypes[currentImageIndex]);
 
   const handleExtract = () => {
     setIsExtracting(true);
@@ -490,6 +551,15 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
                     <Button
                       variant="secondary"
                       size="sm"
+                      onClick={() => handleOpenPreview(character.id)}
+                      data-testid={`button-preview-character-image-${character.id}`}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      预览
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => handleGenerateImages(character.id)}
                       disabled={generatingCharacterId === character.id}
                       data-testid={`button-generate-character-image-${character.id}`}
@@ -627,76 +697,208 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
         </Card>
       )}
 
-      <Dialog open={!!previewCharacterId} onOpenChange={(open) => !open && setPreviewCharacterId(null)}>
-        <DialogContent className="max-w-3xl">
+      <Dialog open={!!previewCharacterId} onOpenChange={(open) => { 
+        if (!open) {
+          setPreviewCharacterId(null);
+          setSelectedVersion(null);
+          setCurrentImageIndex(0);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Wand2 className="h-5 w-5" />
-              AI生成定妆照预览
+            <DialogTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Wand2 className="h-5 w-5" />
+                AI生成定妆照预览
+              </span>
+              {sortedVersionNumbers.length > 0 && effectiveVersion && (
+                <div className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-muted-foreground" />
+                  <Select
+                    value={String(effectiveVersion)}
+                    onValueChange={(v) => setSelectedVersion(parseInt(v, 10))}
+                  >
+                    <SelectTrigger className="w-32" data-testid="select-version">
+                      <SelectValue placeholder="选择版本" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortedVersionNumbers.map((v) => (
+                        <SelectItem key={v} value={String(v)}>
+                          第{v}版
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </DialogTitle>
             <DialogDescription>
-              选择一张图片作为角色形象参考
+              点击图片放大查看，或选择一张图片作为角色形象参考
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            {(["full_body", "front_face", "left_profile", "right_profile"] as CharacterPoseType[]).map((poseType) => {
-              const variant = imageVariants?.find(v => v.poseType === poseType);
-              return (
-                <div key={poseType} className="space-y-2">
-                  <div className="text-sm font-medium">{characterPoseTypeLabels[poseType]}</div>
-                  <div className="relative aspect-square rounded-lg border overflow-hidden bg-muted/50">
+
+          <div className="py-4 space-y-4">
+            <div className="relative">
+              <div className="relative aspect-[4/3] rounded-lg border overflow-hidden bg-muted/50">
+                {currentVariant?.status === "completed" && currentVariant.imageUrl ? (
+                  <>
+                    <img
+                      src={currentVariant.imageUrl}
+                      alt={characterPoseTypeLabels[poseTypes[currentImageIndex]]}
+                      className="w-full h-full object-contain cursor-pointer"
+                      onClick={() => setFullscreenImage({ 
+                        url: currentVariant.imageUrl!, 
+                        label: characterPoseTypeLabels[poseTypes[currentImageIndex]] 
+                      })}
+                    />
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="absolute top-2 right-2"
+                      onClick={() => setFullscreenImage({ 
+                        url: currentVariant.imageUrl!, 
+                        label: characterPoseTypeLabels[poseTypes[currentImageIndex]] 
+                      })}
+                      data-testid="button-fullscreen"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="absolute bottom-2 right-2"
+                      onClick={() => {
+                        if (previewCharacterId && currentVariant.id) {
+                          applyImageMutation.mutate({
+                            characterId: previewCharacterId,
+                            variantId: currentVariant.id,
+                          });
+                        }
+                      }}
+                      disabled={applyImageMutation.isPending}
+                      data-testid={`button-apply-variant-current`}
+                    >
+                      应用此图
+                    </Button>
+                  </>
+                ) : currentVariant?.status === "failed" ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-destructive">
+                    <X className="h-12 w-12 mb-2" />
+                    <span className="text-lg">生成失败</span>
+                    <span className="text-sm px-4 text-center mt-1 max-w-md">{currentVariant.errorMessage}</span>
+                  </div>
+                ) : currentVariant?.status === "generating" || currentVariant?.status === "pending" ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+                    <RefreshCw className="h-12 w-12 mb-2 animate-spin" />
+                    <span className="text-lg">生成中...</span>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+                    <ImageIcon className="h-12 w-12 mb-2" />
+                    <span className="text-lg">暂无图片</span>
+                    <span className="text-sm mt-1">请点击"生成新版本"开始生成</span>
+                  </div>
+                )}
+              </div>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute left-2 top-1/2 -translate-y-1/2"
+                onClick={handlePreviousImage}
+                data-testid="button-prev-image"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+                onClick={handleNextImage}
+                data-testid="button-next-image"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </Button>
+            </div>
+
+            <div className="text-center text-sm font-medium">
+              {characterPoseTypeLabels[poseTypes[currentImageIndex]]} ({currentImageIndex + 1}/4)
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              {poseTypes.map((poseType, index) => {
+                const variant = imageVariants?.find(v => v.poseType === poseType);
+                const isActive = index === currentImageIndex;
+                return (
+                  <div 
+                    key={poseType} 
+                    className={`relative aspect-square rounded-lg border overflow-hidden bg-muted/50 cursor-pointer transition-all ${isActive ? 'ring-2 ring-primary' : 'hover-elevate'}`}
+                    onClick={() => setCurrentImageIndex(index)}
+                    data-testid={`thumbnail-${poseType}`}
+                  >
                     {variant?.status === "completed" && variant.imageUrl ? (
-                      <>
-                        <img
-                          src={variant.imageUrl}
-                          alt={characterPoseTypeLabels[poseType]}
-                          className="w-full h-full object-cover"
-                        />
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="absolute bottom-2 right-2"
-                          onClick={() => {
-                            if (previewCharacterId && variant.id) {
-                              applyImageMutation.mutate({
-                                characterId: previewCharacterId,
-                                variantId: variant.id,
-                              });
-                            }
-                          }}
-                          disabled={applyImageMutation.isPending}
-                          data-testid={`button-apply-variant-${poseType}`}
-                        >
-                          应用此图
-                        </Button>
-                      </>
-                    ) : variant?.status === "failed" ? (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center text-destructive">
-                        <X className="h-8 w-8 mb-2" />
-                        <span className="text-sm">生成失败</span>
-                        <span className="text-xs px-4 text-center mt-1">{variant.errorMessage}</span>
-                      </div>
+                      <img
+                        src={variant.imageUrl}
+                        alt={characterPoseTypeLabels[poseType]}
+                        className="w-full h-full object-cover"
+                      />
                     ) : variant?.status === "generating" || variant?.status === "pending" ? (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
-                        <RefreshCw className="h-8 w-8 mb-2 animate-spin" />
-                        <span className="text-sm">生成中...</span>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : variant?.status === "failed" ? (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <X className="h-6 w-6 text-destructive" />
                       </div>
                     ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
-                        <ImageIcon className="h-8 w-8 mb-2" />
-                        <span className="text-sm">待生成</span>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <ImageIcon className="h-6 w-6 text-muted-foreground" />
                       </div>
                     )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs py-1 text-center">
+                      {characterPoseTypeLabels[poseType]}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-          <div className="flex justify-end gap-2">
+
+          <div className="flex justify-between gap-2">
+            <Button 
+              variant="default" 
+              onClick={handleRegenerateImages}
+              disabled={generatingCharacterId === previewCharacterId}
+              data-testid="button-regenerate"
+            >
+              {generatingCharacterId === previewCharacterId ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4 mr-2" />
+              )}
+              生成新版本
+            </Button>
             <Button variant="outline" onClick={() => setPreviewCharacterId(null)}>
               关闭
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!fullscreenImage} onOpenChange={(open) => !open && setFullscreenImage(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] p-2">
+          <DialogHeader>
+            <DialogTitle>{fullscreenImage?.label}</DialogTitle>
+          </DialogHeader>
+          {fullscreenImage && (
+            <div className="flex items-center justify-center">
+              <img
+                src={fullscreenImage.url}
+                alt={fullscreenImage.label}
+                className="max-w-full max-h-[80vh] object-contain"
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

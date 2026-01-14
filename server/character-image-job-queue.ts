@@ -1,5 +1,5 @@
 import type { CharacterPoseType, CharacterImageVariantStatus } from "@shared/schema";
-import { generateImageBuffer } from "./replit_integrations/image/client";
+import { generateCharacterImage } from "./gemini-image-client";
 
 interface CharacterImageJob {
   id: string;
@@ -101,7 +101,7 @@ async function processJob(job: CharacterImageJob) {
   });
 
   try {
-    const imageBuffer = await generateImageBuffer(job.prompt, "1024x1024");
+    const imageBuffer = await generateCharacterImage(job.prompt);
     const base64Image = `data:image/png;base64,${imageBuffer.toString("base64")}`;
 
     console.log(`[CharacterImageJobQueue] Job ${job.id} completed successfully`);
