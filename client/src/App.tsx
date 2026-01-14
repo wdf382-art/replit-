@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UiScaleControl } from "@/components/ui-scale-control";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import ScriptAnalysis from "@/pages/script-analysis";
@@ -49,7 +50,10 @@ function App() {
               <SidebarInset className="flex flex-col flex-1 min-h-0">
                 <header className="flex items-center justify-between gap-2 px-4 h-14 border-b shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                   <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <ThemeToggle />
+                  <div className="flex items-center gap-1">
+                    <UiScaleControl />
+                    <ThemeToggle />
+                  </div>
                 </header>
                 <main className="flex-1 min-h-0">
                   <Router />

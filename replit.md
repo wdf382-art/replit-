@@ -15,7 +15,7 @@ Preferred communication style: Simple, everyday language.
 - **UI Components**: shadcn/ui (Radix UI primitives)
 - **Styling**: Tailwind CSS with custom design tokens
 - **Build Tool**: Vite
-- **UI/UX**: Linear + Notion hybrid approach, emphasizing clarity and workflow efficiency. Typography uses Inter for UI and JetBrains Mono for script/code. Supports light/dark themes.
+- **UI/UX**: Linear + Notion hybrid approach, emphasizing clarity and workflow efficiency. Typography uses Inter for UI and JetBrains Mono for script/code. Supports light/dark themes and global UI scaling (50%-150%) via header control.
 
 ### Backend
 - **Runtime**: Node.js with Express
