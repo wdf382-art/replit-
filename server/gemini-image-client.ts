@@ -2,29 +2,41 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { Buffer } from "node:buffer";
 
 function createGeminiClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  const baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
   
-  if (!apiKey) {
-    console.warn("[GeminiImageClient] GEMINI_API_KEY not set");
-    return null;
+  if (!apiKey || !baseUrl) {
+    console.warn("[GeminiImageClient] AI_INTEGRATIONS_GEMINI not configured, falling back to GEMINI_API_KEY");
+    const fallbackKey = process.env.GEMINI_API_KEY;
+    if (!fallbackKey) {
+      console.warn("[GeminiImageClient] No Gemini API key available");
+      return null;
+    }
+    return new GoogleGenAI({ apiKey: fallbackKey });
   }
   
-  console.log("[GeminiImageClient] Initialized with GEMINI_API_KEY");
-  return new GoogleGenAI({ apiKey });
+  console.log("[GeminiImageClient] Initialized with Replit AI Integrations");
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      apiVersion: "",
+      baseUrl,
+    },
+  });
 }
 
 export const geminiClient = createGeminiClient();
 
 export async function generateCharacterImage(prompt: string): Promise<Buffer> {
   if (!geminiClient) {
-    throw new Error("Gemini client is not configured. Please set GEMINI_API_KEY in environment secrets.");
+    throw new Error("Gemini client is not configured. Please ensure Replit AI Integrations is set up.");
   }
   
   try {
-    console.log("[GeminiImageClient] Generating image with model: gemini-2.0-flash-exp");
+    console.log("[GeminiImageClient] Generating image with model: gemini-2.5-flash-image");
     
     const response = await geminiClient.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash-image",
       contents: [
         {
           role: "user",
@@ -32,7 +44,7 @@ export async function generateCharacterImage(prompt: string): Promise<Buffer> {
         },
       ],
       config: {
-        responseModalities: [Modality.IMAGE],
+        responseModalities: [Modality.TEXT, Modality.IMAGE],
       },
     });
     
