@@ -47,7 +47,12 @@ Preferred communication style: Simple, everyday language.
 #### Character Reference System
 - **Auto-extraction**: AI analyzes scripts to extract character names, roles, and appearance descriptions, classifying roles (e.g., 男主/女主).
 - **Image References**: Allows uploading reference images for characters and managing assets (clothing, shoes, props).
-- **AI Character Image Auto-Generation**: Generates 4 reference images per character (full body, front face, left profile, right profile) based on extracted appearance details from the script. Includes a preview and approval workflow, with background processing and status tracking.
+- **AI Character Image Auto-Generation**: Generates 4 reference images per character (全身照, 正脸近景, 左侧脸近景, 右侧脸近景) using NANO BANANA PRO (Gemini gemini-3-pro-image-preview model). Features:
+  - **Version History**: Each regeneration creates a new version, preserving all previous versions for comparison
+  - **Preview Modal**: Large main image with prev/next navigation, thumbnail gallery, fullscreen view
+  - **Version Selector**: Dropdown to switch between different generation versions (newest shown first)
+  - **Background Processing**: Async job queue (max 2 concurrent) with status polling every 3 seconds
+  - **Apply Workflow**: Select any variant image to apply as the character's main reference image
 
 #### Director Style Framework
 - Storyboard generation uses an 8-dimension director style framework, analyzing how directors handle universal cinematography rules (e.g., Shot size transitions, 30-degree rule, camera movement, composition, color, lighting) and their signature techniques.
