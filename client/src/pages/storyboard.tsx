@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Image,
@@ -122,6 +122,8 @@ export default function StoryboardPage() {
   const [generatingVideoId, setGeneratingVideoId] = useState<string | null>(null);
   const [isGeneratingAllVideos, setIsGeneratingAllVideos] = useState(false);
   const [selectedImageProvider, setSelectedImageProvider] = useState<ImageProvider>("openai");
+  const [imageGenProgressMessage, setImageGenProgressMessage] = useState<string>("");
+  const imageGenEventSourceRef = useRef<EventSource | null>(null);
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -261,31 +263,93 @@ export default function StoryboardPage() {
     },
   });
 
-  // Generate images for all shots in the scene
-  const generateAllImagesMutation = useMutation({
-    mutationFn: async ({ sceneId, provider }: { sceneId: string; provider: ImageProvider }) => {
-      setIsGeneratingAllImages(true);
-      setImageGenProgress(0);
-      return apiRequest("POST", `/api/scenes/${sceneId}/generate-all-images`, { provider });
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+  // Cleanup EventSource on unmount or scene change
+  useEffect(() => {
+    return () => {
+      if (imageGenEventSourceRef.current) {
+        imageGenEventSourceRef.current.close();
+        imageGenEventSourceRef.current = null;
+        setIsGeneratingAllImages(false);
+        setImageGenProgressMessage("");
+      }
+    };
+  }, [selectedScene?.id]);
+
+  // Generate images for all shots using SSE for real-time progress
+  const startImageGenerationWithProgress = async (sceneId: string, provider: ImageProvider) => {
+    // Close any existing connection
+    if (imageGenEventSourceRef.current) {
+      imageGenEventSourceRef.current.close();
+    }
+    
+    setIsGeneratingAllImages(true);
+    setImageGenProgress(0);
+    setImageGenProgressMessage("正在连接...");
+    
+    const eventSource = new EventSource(`/api/scenes/${sceneId}/generate-all-images-stream?provider=${provider}`);
+    imageGenEventSourceRef.current = eventSource;
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        switch (data.type) {
+          case "start":
+            setImageGenProgressMessage(data.message);
+            break;
+          case "progress":
+            setImageGenProgress(data.progress);
+            setImageGenProgressMessage(data.message);
+            break;
+          case "retry":
+            setImageGenProgressMessage(data.message);
+            break;
+          case "complete":
+            setImageGenProgress(data.progress);
+            setImageGenProgressMessage(data.message);
+            queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+            break;
+          case "done":
+            setImageGenProgress(100);
+            setImageGenProgressMessage(data.message);
+            setIsGeneratingAllImages(false);
+            queryClient.invalidateQueries({ queryKey: ["/api/shots"] });
+            toast({
+              title: "批量图片生成完成",
+              description: `成功生成 ${data.totalGenerated}/${data.total} 张图片`,
+            });
+            eventSource.close();
+            imageGenEventSourceRef.current = null;
+            break;
+          case "error":
+            setIsGeneratingAllImages(false);
+            setImageGenProgressMessage("");
+            toast({
+              title: "生成失败",
+              description: data.message,
+              variant: "destructive",
+            });
+            eventSource.close();
+            imageGenEventSourceRef.current = null;
+            break;
+        }
+      } catch (err) {
+        console.error("Error parsing SSE data:", err);
+      }
+    };
+    
+    eventSource.onerror = () => {
       setIsGeneratingAllImages(false);
-      setImageGenProgress(100);
+      setImageGenProgressMessage("");
       toast({
-        title: "批量图片生成完成",
-        description: `成功生成 ${data.totalGenerated} 张图片`,
-      });
-    },
-    onError: () => {
-      setIsGeneratingAllImages(false);
-      toast({
-        title: "批量生成失败",
-        description: "请稍后重试",
+        title: "连接中断",
+        description: "图片生成连接意外中断",
         variant: "destructive",
       });
-    },
-  });
+      eventSource.close();
+      imageGenEventSourceRef.current = null;
+    };
+  };
 
   // Generate video for a single shot (async - returns immediately)
   const generateShotVideoMutation = useMutation({
@@ -1034,14 +1098,14 @@ export default function StoryboardPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => selectedScene && generateAllImagesMutation.mutate({ sceneId: selectedScene.id, provider: selectedImageProvider })}
+                        onClick={() => selectedScene && startImageGenerationWithProgress(selectedScene.id, selectedImageProvider)}
                         disabled={isGeneratingAllImages || !selectedScene}
                         data-testid="button-generate-all-images"
                       >
                         {isGeneratingAllImages ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            批量生成中...
+                            生成中 {imageGenProgress}%
                           </>
                         ) : (
                           <>
@@ -1088,6 +1152,43 @@ export default function StoryboardPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Image generation progress bar */}
+                {isGeneratingAllImages && storyboardViewType === "image" && (
+                  <div className="mb-4 p-4 bg-muted/50 rounded-lg border">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">图片生成进度</span>
+                      <span className="text-sm text-muted-foreground">{imageGenProgress}%</span>
+                    </div>
+                    <Progress value={imageGenProgress} className="h-2" />
+                    <p className="text-xs text-muted-foreground mt-2">{imageGenProgressMessage}</p>
+                  </div>
+                )}
+
+                {/* Video generation progress bar */}
+                {storyboardViewType === "video" && shots && shots.length > 0 && (() => {
+                  const shotsWithImages = shots.filter(s => s.imageBase64);
+                  const generatingCount = shots.filter(s => s.videoStatus === "generating").length;
+                  const completedCount = shots.filter(s => s.videoUrl).length;
+                  const totalForVideo = shotsWithImages.length;
+                  const videoProgress = totalForVideo > 0 ? Math.round((completedCount / totalForVideo) * 100) : 0;
+                  
+                  if (generatingCount > 0) {
+                    return (
+                      <div className="mb-4 p-4 bg-muted/50 rounded-lg border">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">视频生成进度</span>
+                          <span className="text-sm text-muted-foreground">{completedCount}/{totalForVideo} ({videoProgress}%)</span>
+                        </div>
+                        <Progress value={videoProgress} className="h-2" />
+                        <p className="text-xs text-muted-foreground mt-2">
+                          正在生成 {generatingCount} 个视频，已完成 {completedCount} 个
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {/* Shots grid */}
                 <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-4"}>

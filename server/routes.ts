@@ -1211,7 +1211,167 @@ Requirements: Professional film cinematography, cinematic lighting, high quality
     }
   });
 
-  // Generate images for all shots in a scene with auto-retry
+  // Generate images for all shots in a scene with SSE progress streaming
+  app.get("/api/scenes/:id/generate-all-images-stream", async (req, res) => {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 2000;
+    
+    // Track connection state
+    let isConnectionClosed = false;
+    
+    // Set up SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    
+    // Handle client disconnect
+    req.on("close", () => {
+      isConnectionClosed = true;
+      console.log("[SSE] Client disconnected from image generation stream");
+    });
+    
+    const sendProgress = (data: object) => {
+      if (isConnectionClosed) return;
+      try {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      } catch (err) {
+        isConnectionClosed = true;
+      }
+    };
+    
+    try {
+      const scene = await storage.getScene(req.params.id);
+      if (!scene) {
+        sendProgress({ type: "error", message: "Scene not found" });
+        if (!isConnectionClosed) res.end();
+        return;
+      }
+
+      const shots = await storage.getShots(req.params.id);
+      if (!shots || shots.length === 0) {
+        sendProgress({ type: "error", message: "No shots to generate images for" });
+        if (!isConnectionClosed) res.end();
+        return;
+      }
+
+      const provider = (req.query?.provider as ImageProvider) || "openai";
+      const { generateImage } = await import("./image-providers");
+      const results: { id: string; shotNumber: number; success: boolean; error?: string }[] = [];
+      const total = shots.length;
+      
+      sendProgress({ type: "start", total, message: `开始生成 ${total} 张图片...` });
+      
+      for (let i = 0; i < shots.length; i++) {
+        // Check if client disconnected
+        if (isConnectionClosed) {
+          console.log("[SSE] Stopping image generation - client disconnected");
+          break;
+        }
+        
+        const shot = shots[i];
+        const currentIndex = i + 1;
+        const progress = Math.round((i / total) * 100);
+        
+        sendProgress({ 
+          type: "progress", 
+          current: currentIndex, 
+          total, 
+          progress, 
+          shotId: shot.id,
+          shotNumber: shot.shotNumber,
+          message: `正在生成第 ${currentIndex}/${total} 张图片 (镜头 #${shot.shotNumber})...` 
+        });
+        
+        const imagePrompt = `Film storyboard frame, cinematic style:
+Scene: ${scene.title || ""}
+Location: ${scene.location || ""}
+Time: ${scene.timeOfDay || ""}
+
+Shot ${shot.shotNumber}: ${shot.description}
+Shot type: ${shot.shotType || "medium shot"}
+Camera angle: ${shot.cameraAngle || "eye level"}
+Camera movement: ${shot.cameraMovement || "static"}
+${shot.atmosphere ? `Atmosphere: ${shot.atmosphere}` : ""}
+
+Requirements: Professional film cinematography, cinematic lighting, high quality, movie style, 16:9 aspect ratio`;
+
+        let imageBuffer: Buffer | null = null;
+        
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            console.log(`Generating image for shot ${shot.id} (${shot.shotNumber}) using ${provider}, attempt ${attempt}/${MAX_RETRIES}`);
+            const result = await generateImage(imagePrompt, provider);
+            imageBuffer = result.buffer;
+            break;
+          } catch (err) {
+            console.error(`Image generation attempt ${attempt} for shot ${shot.id} failed:`, err);
+            if (attempt < MAX_RETRIES) {
+              const delay = RETRY_DELAY_MS * Math.pow(1.5, attempt - 1);
+              sendProgress({ 
+                type: "retry", 
+                current: currentIndex, 
+                total, 
+                attempt, 
+                maxRetries: MAX_RETRIES,
+                message: `重试第 ${attempt}/${MAX_RETRIES} 次...` 
+              });
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
+        }
+        
+        if (imageBuffer) {
+          const imageBase64 = imageBuffer.toString("base64");
+          await storage.updateShot(shot.id, {
+            imageBase64: imageBase64,
+          });
+          results.push({ id: shot.id, shotNumber: shot.shotNumber, success: true });
+          sendProgress({ 
+            type: "complete", 
+            current: currentIndex, 
+            total, 
+            progress: Math.round((currentIndex / total) * 100),
+            shotId: shot.id,
+            shotNumber: shot.shotNumber,
+            success: true,
+            message: `镜头 #${shot.shotNumber} 生成完成` 
+          });
+        } else {
+          console.error(`Failed to generate image for shot ${shot.id} after ${MAX_RETRIES} attempts`);
+          results.push({ id: shot.id, shotNumber: shot.shotNumber, success: false, error: "Generation failed after retries" });
+          sendProgress({ 
+            type: "complete", 
+            current: currentIndex, 
+            total, 
+            progress: Math.round((currentIndex / total) * 100),
+            shotId: shot.id,
+            shotNumber: shot.shotNumber,
+            success: false,
+            message: `镜头 #${shot.shotNumber} 生成失败` 
+          });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      sendProgress({ 
+        type: "done", 
+        results, 
+        totalGenerated: successCount,
+        total,
+        progress: 100,
+        message: `完成! 成功生成 ${successCount}/${total} 张图片` 
+      });
+      if (!isConnectionClosed) res.end();
+    } catch (error) {
+      console.error("Error generating scene images:", error);
+      sendProgress({ type: "error", message: "生成图片时发生错误" });
+      if (!isConnectionClosed) res.end();
+    }
+  });
+
+  // Generate images for all shots in a scene (non-streaming fallback)
   app.post("/api/scenes/:id/generate-all-images", async (req, res) => {
     const MAX_RETRIES = 5;
     const RETRY_DELAY_MS = 2000;
