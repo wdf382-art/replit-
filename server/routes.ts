@@ -2038,6 +2038,35 @@ ${scriptContent.substring(0, 8000)}
     }
   });
 
+  // Delete character image variants by version
+  app.delete("/api/characters/:id/image-versions/:version", async (req, res) => {
+    try {
+      const { id, version } = req.params;
+      const versionNum = parseInt(version, 10);
+      if (isNaN(versionNum) || versionNum < 1) {
+        return res.status(400).json({ error: "Invalid version number" });
+      }
+      
+      // Validate character exists
+      const character = await storage.getCharacter(id);
+      if (!character) {
+        return res.status(404).json({ error: "Character not found" });
+      }
+      
+      // Validate version exists before deleting
+      const versions = await storage.getVersionNumbers(id);
+      if (!versions.includes(versionNum)) {
+        return res.status(404).json({ error: "Version not found" });
+      }
+      
+      await storage.deleteCharacterImageVariantsByVersion(id, versionNum);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting character image version:", error);
+      res.status(500).json({ error: "Failed to delete image version" });
+    }
+  });
+
   app.get("/api/performance-guides", async (req, res) => {
     try {
       const sceneId = req.query.sceneId as string;
@@ -2470,7 +2499,7 @@ ${scriptContent.substring(0, 8000)}
 
   app.post("/api/call-sheets/parse-text", async (req, res) => {
     try {
-      const { projectId, title, rawText, useAI } = req.body;
+      const { projectId, title, rawText, useAI, shootDate } = req.body;
       if (!projectId || !title || !rawText) {
         return res.status(400).json({ error: "projectId, title和rawText是必需的" });
       }
@@ -2536,6 +2565,7 @@ ${scriptContent.substring(0, 8000)}
         title,
         rawText,
         sceneNumbers: [...new Set(sceneNumbers)],
+        shootDate: shootDate ? new Date(shootDate) : null,
       });
 
       res.status(201).json({

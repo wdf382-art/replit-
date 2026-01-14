@@ -24,22 +24,49 @@ export async function generateVideoFromImage(
   }
 }
 
+function getGeminiApiConfig() {
+  const replitApiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+  const replitBaseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
+  
+  if (replitApiKey && replitBaseUrl) {
+    console.log("[VEO] Using Replit AI Integrations");
+    return {
+      apiKey: replitApiKey,
+      baseUrl: replitBaseUrl.replace(/\/$/, ""),
+    };
+  }
+  
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    console.log("[VEO] Using GEMINI_API_KEY");
+    return {
+      apiKey: geminiKey,
+      baseUrl: "https://generativelanguage.googleapis.com",
+    };
+  }
+  
+  return null;
+}
+
 async function generateWithVeo(
   imageBase64: string,
   description: string,
   duration: number
 ): Promise<VideoGenerationResult> {
-  const apiKey = process.env.VEO_API_KEY;
-  if (!apiKey) {
-    return { success: false, error: "VEO API key not configured. Please add VEO_API_KEY secret." };
+  const apiConfig = getGeminiApiConfig();
+  if (!apiConfig) {
+    return { success: false, error: "Gemini API not configured. Please set up Replit AI Integrations or add GEMINI_API_KEY." };
   }
 
   try {
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning", {
+    const apiUrl = `${apiConfig.baseUrl}/v1beta/models/veo-2.0-generate-001:predictLongRunning`;
+    console.log("[VEO] Sending request to:", apiUrl);
+    
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
+        "x-goog-api-key": apiConfig.apiKey,
       },
       body: JSON.stringify({
         instances: [{
@@ -65,7 +92,7 @@ async function generateWithVeo(
     const result = await response.json();
     
     if (result.name) {
-      const videoUrl = await pollForVeoResult(result.name, apiKey);
+      const videoUrl = await pollForVeoResult(result.name, apiConfig);
       if (videoUrl) {
         return { success: true, videoUrl };
       }
@@ -79,15 +106,16 @@ async function generateWithVeo(
   }
 }
 
-async function pollForVeoResult(operationName: string, apiKey: string): Promise<string | null> {
+async function pollForVeoResult(operationName: string, apiConfig: { apiKey: string; baseUrl: string }): Promise<string | null> {
   const maxAttempts = 60;
   const pollInterval = 5000;
 
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${operationName}`, {
+      const pollUrl = `${apiConfig.baseUrl}/v1beta/${operationName}`;
+      const response = await fetch(pollUrl, {
         headers: {
-          "x-goog-api-key": apiKey,
+          "x-goog-api-key": apiConfig.apiKey,
         },
       });
 

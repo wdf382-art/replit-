@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Image,
@@ -21,6 +21,7 @@ import {
   Trash2,
   Video,
   Play,
+  CalendarIcon,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAppStore } from "@/lib/store";
@@ -71,7 +74,8 @@ import {
   imageProviderInfo,
 } from "@shared/schema";
 import { Input } from "@/components/ui/input";
-import { format } from "date-fns";
+import { format, isToday, isTomorrow, isYesterday, startOfDay } from "date-fns";
+import { zhCN } from "date-fns/locale";
 import { History, Save, ImagePlus, Loader2 } from "lucide-react";
 
 export default function StoryboardPage() {
@@ -96,6 +100,7 @@ export default function StoryboardPage() {
   const [showCallSheetDialog, setShowCallSheetDialog] = useState(false);
   const [callSheetTitle, setCallSheetTitle] = useState("");
   const [callSheetText, setCallSheetText] = useState("");
+  const [callSheetShootDate, setCallSheetShootDate] = useState<Date | undefined>(new Date());
   const [isUploadingCallSheet, setIsUploadingCallSheet] = useState(false);
   const [showSceneDetails, setShowSceneDetails] = useState(false);
   const [showCreateSceneDialog, setShowCreateSceneDialog] = useState(false);
@@ -168,8 +173,50 @@ export default function StoryboardPage() {
     enabled: !!currentProject?.id,
   });
 
+  const groupedCallSheets = useMemo(() => {
+    if (!callSheets) return { today: [], upcoming: [], past: [], noDate: [] };
+    
+    const today: typeof callSheets = [];
+    const upcoming: typeof callSheets = [];
+    const past: typeof callSheets = [];
+    const noDate: typeof callSheets = [];
+    
+    const now = startOfDay(new Date());
+    
+    callSheets.forEach((cs) => {
+      if (!cs.shootDate) {
+        noDate.push(cs);
+      } else {
+        const shootDate = new Date(cs.shootDate);
+        if (isToday(shootDate)) {
+          today.push(cs);
+        } else if (shootDate > now) {
+          upcoming.push(cs);
+        } else {
+          past.push(cs);
+        }
+      }
+    });
+    
+    upcoming.sort((a, b) => new Date(a.shootDate!).getTime() - new Date(b.shootDate!).getTime());
+    past.sort((a, b) => new Date(b.shootDate!).getTime() - new Date(a.shootDate!).getTime());
+    
+    return { today, upcoming, past, noDate };
+  }, [callSheets]);
+
+  const getDateLabel = (date: Date) => {
+    if (isToday(date)) return "今天";
+    if (isTomorrow(date)) return "明天";
+    if (isYesterday(date)) return "昨天";
+    return format(date, "M月d日", { locale: zhCN });
+  };
+
   const filteredScenes = scenes?.filter((scene) => {
     if (!selectedCallSheetId) return true;
+    if (selectedCallSheetId === "today") {
+      const todaySheets = callSheets?.filter((cs) => cs.shootDate && isToday(new Date(cs.shootDate)));
+      return todaySheets?.some((cs) => cs.sceneNumbers?.includes(scene.sceneNumber));
+    }
     const callSheet = callSheets?.find((cs) => cs.id === selectedCallSheetId);
     return callSheet?.sceneNumbers?.includes(scene.sceneNumber);
   });
@@ -528,6 +575,7 @@ export default function StoryboardPage() {
         projectId: currentProject.id,
         title: callSheetTitle,
         rawText: callSheetText,
+        shootDate: callSheetShootDate?.toISOString(),
       });
 
       console.log("Call sheet response:", response);
@@ -549,6 +597,7 @@ export default function StoryboardPage() {
       setShowCallSheetDialog(false);
       setCallSheetTitle("");
       setCallSheetText("");
+      setCallSheetShootDate(new Date());
     } catch (error) {
       toast({
         title: "保存失败",
@@ -690,9 +739,27 @@ export default function StoryboardPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">所有场次 (全剧本)</SelectItem>
-                  {callSheets?.map((cs) => (
+                  {groupedCallSheets.today.length > 0 && (
+                    <SelectItem value="today">当日通告 ({groupedCallSheets.today.length})</SelectItem>
+                  )}
+                  {groupedCallSheets.today.length > 0 && groupedCallSheets.today.map((cs) => (
                     <SelectItem key={cs.id} value={cs.id}>
-                      {cs.title} ({format(new Date(cs.createdAt), "MM/dd")})
+                      {cs.title} (今天)
+                    </SelectItem>
+                  ))}
+                  {groupedCallSheets.upcoming.length > 0 && groupedCallSheets.upcoming.map((cs) => (
+                    <SelectItem key={cs.id} value={cs.id}>
+                      {cs.title} ({getDateLabel(new Date(cs.shootDate!))})
+                    </SelectItem>
+                  ))}
+                  {groupedCallSheets.past.length > 0 && groupedCallSheets.past.map((cs) => (
+                    <SelectItem key={cs.id} value={cs.id}>
+                      {cs.title} ({getDateLabel(new Date(cs.shootDate!))})
+                    </SelectItem>
+                  ))}
+                  {groupedCallSheets.noDate.length > 0 && groupedCallSheets.noDate.map((cs) => (
+                    <SelectItem key={cs.id} value={cs.id}>
+                      {cs.title} (未设日期)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1774,13 +1841,34 @@ export default function StoryboardPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">标题</label>
-              <Input 
-                placeholder="例如：2024-01-11 拍摄通告" 
-                value={callSheetTitle}
-                onChange={(e) => setCallSheetTitle(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">标题</label>
+                <Input 
+                  placeholder="例如：2024-01-11 拍摄通告" 
+                  value={callSheetTitle}
+                  onChange={(e) => setCallSheetTitle(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">拍摄日期</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {callSheetShootDate ? format(callSheetShootDate, "yyyy-MM-dd") : "选择日期"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={callSheetShootDate}
+                      onSelect={setCallSheetShootDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">内容</label>

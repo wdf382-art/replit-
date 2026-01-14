@@ -136,6 +136,7 @@ export interface IStorage {
   createCharacterImageVariant(variant: InsertCharacterImageVariant): Promise<CharacterImageVariant>;
   updateCharacterImageVariant(id: string, updates: Partial<InsertCharacterImageVariant>): Promise<CharacterImageVariant | undefined>;
   deleteCharacterImageVariantsByCharacter(characterId: string): Promise<void>;
+  deleteCharacterImageVariantsByVersion(characterId: string, version: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -655,6 +656,15 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCharacterImageVariantsByCharacter(characterId: string): Promise<void> {
     await db.delete(characterImageVariants).where(eq(characterImageVariants.characterId, characterId));
+  }
+
+  async deleteCharacterImageVariantsByVersion(characterId: string, version: number): Promise<void> {
+    await db.delete(characterImageVariants).where(
+      and(
+        eq(characterImageVariants.characterId, characterId),
+        eq(characterImageVariants.version, version)
+      )
+    );
   }
 }
 
@@ -1242,6 +1252,10 @@ export class MemStorage implements IStorage {
   }
 
   async deleteCharacterImageVariantsByCharacter(_characterId: string): Promise<void> {
+    // No-op for MemStorage
+  }
+
+  async deleteCharacterImageVariantsByVersion(_characterId: string, _version: number): Promise<void> {
     // No-op for MemStorage
   }
 }

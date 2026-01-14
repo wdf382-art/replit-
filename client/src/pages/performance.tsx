@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { format, isToday, isTomorrow, isYesterday, startOfDay } from "date-fns";
+import { zhCN } from "date-fns/locale";
 import {
   Drama,
   Wand2,
@@ -100,9 +102,51 @@ export default function PerformancePage() {
 
   const filteredScenes = scenes?.filter((scene) => {
     if (!selectedCallSheetId) return true;
+    if (selectedCallSheetId === "today") {
+      const todaySheets = callSheets?.filter((cs) => cs.shootDate && isToday(new Date(cs.shootDate)));
+      return todaySheets?.some((cs) => cs.sceneNumbers?.includes(scene.sceneNumber));
+    }
     const callSheet = callSheets?.find((cs) => cs.id === selectedCallSheetId);
     return callSheet?.sceneNumbers?.includes(scene.sceneNumber);
   });
+
+  const groupedCallSheets = useMemo(() => {
+    if (!callSheets) return { today: [], upcoming: [], past: [], noDate: [] };
+    
+    const today: typeof callSheets = [];
+    const upcoming: typeof callSheets = [];
+    const past: typeof callSheets = [];
+    const noDate: typeof callSheets = [];
+    
+    const now = startOfDay(new Date());
+    
+    callSheets.forEach((cs) => {
+      if (!cs.shootDate) {
+        noDate.push(cs);
+      } else {
+        const shootDate = new Date(cs.shootDate);
+        if (isToday(shootDate)) {
+          today.push(cs);
+        } else if (shootDate > now) {
+          upcoming.push(cs);
+        } else {
+          past.push(cs);
+        }
+      }
+    });
+    
+    upcoming.sort((a, b) => new Date(a.shootDate!).getTime() - new Date(b.shootDate!).getTime());
+    past.sort((a, b) => new Date(b.shootDate!).getTime() - new Date(a.shootDate!).getTime());
+    
+    return { today, upcoming, past, noDate };
+  }, [callSheets]);
+
+  const getDateLabel = (date: Date) => {
+    if (isToday(date)) return "今天";
+    if (isTomorrow(date)) return "明天";
+    if (isYesterday(date)) return "昨天";
+    return format(date, "M月d日", { locale: zhCN });
+  };
 
   const { data: globalAnalysis, isLoading: globalLoading } = useQuery<ScriptAnalysisGlobal | null>({
     queryKey: ["/api/script-analysis-global", currentProject?.id],
@@ -262,7 +306,25 @@ export default function PerformancePage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">所有场次 (全剧本)</SelectItem>
-              {callSheets?.map((cs) => (
+              {groupedCallSheets.today.length > 0 && (
+                <SelectItem value="today">当日通告 ({groupedCallSheets.today.length})</SelectItem>
+              )}
+              {groupedCallSheets.today.length > 0 && groupedCallSheets.today.map((cs) => (
+                <SelectItem key={cs.id} value={cs.id}>
+                  今天 - {cs.title}
+                </SelectItem>
+              ))}
+              {groupedCallSheets.upcoming.length > 0 && groupedCallSheets.upcoming.map((cs) => (
+                <SelectItem key={cs.id} value={cs.id}>
+                  {getDateLabel(new Date(cs.shootDate!))} - {cs.title}
+                </SelectItem>
+              ))}
+              {groupedCallSheets.past.length > 0 && groupedCallSheets.past.map((cs) => (
+                <SelectItem key={cs.id} value={cs.id}>
+                  {getDateLabel(new Date(cs.shootDate!))} - {cs.title}
+                </SelectItem>
+              ))}
+              {groupedCallSheets.noDate.length > 0 && groupedCallSheets.noDate.map((cs) => (
                 <SelectItem key={cs.id} value={cs.id}>
                   {cs.title}
                 </SelectItem>

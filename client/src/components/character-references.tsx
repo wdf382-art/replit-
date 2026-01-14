@@ -320,6 +320,28 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
     },
   });
 
+  const deleteVersionMutation = useMutation({
+    mutationFn: async ({ characterId, version }: { characterId: string; version: number }) => {
+      return apiRequest("DELETE", `/api/characters/${characterId}/image-versions/${version}`, {});
+    },
+    onSuccess: (_, { characterId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", characterId, "image-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", characterId, "image-variants"] });
+      setSelectedVersion(null);
+      toast({
+        title: "删除成功",
+        description: "该版本定妆照已删除",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "删除失败",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleGenerateImages = (characterId: string) => {
     setGeneratingCharacterId(characterId);
     generateImagesMutation.mutate({ characterId, provider: selectedProvider });
@@ -743,6 +765,26 @@ export function CharacterReferences({ projectId }: CharacterReferencesProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                  {sortedVersionNumbers.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        if (previewCharacterId && effectiveVersion) {
+                          deleteVersionMutation.mutate({
+                            characterId: previewCharacterId,
+                            version: effectiveVersion,
+                          });
+                        }
+                      }}
+                      disabled={deleteVersionMutation.isPending}
+                      title="删除当前版本"
+                      data-testid="button-delete-version"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               )}
             </DialogTitle>
