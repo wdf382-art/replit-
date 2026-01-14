@@ -2,30 +2,27 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { Buffer } from "node:buffer";
 
 function createGeminiClient() {
-  const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
-  const baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
+  const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
-    console.warn("[GeminiImageClient] AI_INTEGRATIONS_GEMINI_API_KEY not set");
+    console.warn("[GeminiImageClient] GEMINI_API_KEY not set");
     return null;
   }
   
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: baseUrl ? { baseUrl } : undefined,
-  });
+  console.log("[GeminiImageClient] Initialized with GEMINI_API_KEY");
+  return new GoogleGenAI({ apiKey });
 }
 
 export const geminiClient = createGeminiClient();
 
 export async function generateCharacterImage(prompt: string): Promise<Buffer> {
   if (!geminiClient) {
-    throw new Error("Gemini client is not configured. Please ensure AI_INTEGRATIONS_GEMINI_API_KEY is set.");
+    throw new Error("Gemini client is not configured. Please set GEMINI_API_KEY in environment secrets.");
   }
   
   try {
     const response = await geminiClient.models.generateContent({
-      model: "gemini-3-pro-image-preview",
+      model: "gemini-2.5-flash-image",
       contents: [
         {
           role: "user",
